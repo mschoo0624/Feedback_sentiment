@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:13
+    container_name: feedback-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: mschoo0624
+      POSTGRES_DB: feedback_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - feedback_data:/var/lib/postgresql/data
+
+  fastapi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: feedback-api
+    command: uvicorn app.main:app --reload --port 8000
+    volumes:
+      - .:/code
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:mschoo0624@db:5432/feedback_db
+    depends_on:
+      - db
+
+volumes:
+  feedback_data:
