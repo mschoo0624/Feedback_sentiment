@@ -38,6 +38,7 @@ def analyze_sentiment(text: str, company_id: int = None, db_session=None) -> Dic
         if detect(text) != 'en':
             # Debugging.
             print("Debugging: Translation has operated!!!")
+            
             logger.info(f"Translating non-English text: {text[:50]}...")
             text = translate_text(text)
             translated = True

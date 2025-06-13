@@ -18,7 +18,7 @@ elif torch.cuda.is_available():
 else:
     device = -1  # CPU
     logger.info("Using device: CPU")
-    
+
 class AdvancedSarcasmDetector:
     def __init__(self):
         print("Debugging: Initializing Advanced Sarcasm Detector...")

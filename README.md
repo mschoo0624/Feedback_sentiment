@@ -34,7 +34,7 @@ Chrome extension and Slackbot for in-the-moment sentiment classification.
 # ✅ STAGE 1: BACKEND DEVELOPMENT (FastAPI + Transformers)
 ## 🛠️ Goal: Build a FastAPI server that exposes a /classify endpoint to accept feedback text and return sentiment.
 
-Command to run the server: "uvicorn app.main:app --reload --port 8000"
+
 
 # 📌 TODO / Future Features
 - Feedback dashboard (with Plotly/Dash)
