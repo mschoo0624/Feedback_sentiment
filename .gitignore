@@ -1,3 +1,4 @@
+# ====== Existing Content (keep these) ======
 # Virtual Environment
 venv/
 env/
@@ -43,9 +44,35 @@ Thumbs.db
 *.db
 *.sqlite3
 
-# Large model files (if any)
+# ====== Add These ML-Specific Rules ======
+# ML Model Files
 *.bin
 *.pth
 *.h5
 *.pkl
 *.joblib
+*.pt
+*.onnx
+*.tflite
+
+# Training Results and Models (specific to your project)
+backend/app/ml/results/
+backend/app/ml/sarcasm_sentiment_model/
+
+# Jupyter/Notebook checkpoints
+.ipynb_checkpoints/
+
+# Experiment tracking
+mlruns/
+
+# Data files
+*.csv
+*.parquet
+*.feather
+*.hdf5
+*.npy
+*.npz
+
+# Logs and outputs
+*.log
+*.out
