@@ -9,7 +9,7 @@ class Feedback(Base):
     # Make optional fields nullable=True to match your CRUD logic
     id = Column(Integer, primary_key=True, index=True)
     text = Column(String, nullable=False)
-    is_sarcastic = Column(Boolean, nullable=True)  # Renamed from 'sarcasm'
-    was_translated = Column(Boolean, nullable=True)  # Renamed from 'translate'
+    is_sarcastic = Column(Integer, nullable=True)  # Changed to Integer
+    was_translated = Column(Integer, nullable=True)  # Changed to Integer
     sentiment = Column(String, nullable=False)
     confidence = Column(Float, nullable=True)  # Changed to nullable=True since it can be None

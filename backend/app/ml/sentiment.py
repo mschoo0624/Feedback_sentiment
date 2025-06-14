@@ -3,7 +3,7 @@ from langdetect import detect
 import torch
 from typing import Dict, Any
 from .translation import translate_text
-from .sarcasm_detection import detect_sarcasm
+from .sarcasm_detection import AdvancedSarcasmDetector  # Import class directly
 import logging
 
 # Configure logging
@@ -20,15 +20,23 @@ else:
     device = -1  # CPU
     logger.info("Using device: CPU")
 
+# Initialize models
 try:
+    logger.info("Loading sentiment model...")
     SENTIMENT_MODEL = pipeline(
         task="text-classification",
         model="distilbert-base-uncased-finetuned-sst-2-english",
-        device=device
+        device=device,
+        truncation=True,
+        max_length=128
     )
     logger.info("Sentiment model loaded successfully")
+    
+    logger.info("Initializing sarcasm detector...")
+    SARCASM_DETECTOR = AdvancedSarcasmDetector()
+    logger.info("Sarcasm detector initialized successfully")
 except Exception as e:
-    logger.error(f"Failed to load sentiment model: {str(e)}")
+    logger.error(f"Failed to load models: {str(e)}")
     raise
 
 def analyze_sentiment(text: str, company_id: int = None, db_session=None) -> Dict[str, Any]:
@@ -36,42 +44,43 @@ def analyze_sentiment(text: str, company_id: int = None, db_session=None) -> Dic
         # Handle translation if needed
         translated = False
         if detect(text) != 'en':
-            # Debugging.
-            print("Debugging: Translation has operated!!!")
-            
             logger.info(f"Translating non-English text: {text[:50]}...")
             text = translate_text(text)
             translated = True
         
-        # Debugging.
-        print("Debugging: This Line of code!!!")
         # Get sentiment prediction
-        base_result = SENTIMENT_MODEL(text)[0]
-        # Debugging.
-        print("Debugging: It's working now!!!")
-        
-        sentiment = "Like" if base_result['label'] == "POSITIVE" else "Dislike"
+        base_result = SENTIMENT_MODEL(text[:512])[0]  # Truncate for safety
+        base_sentiment = "Like" if base_result['label'] == "POSITIVE" else "Dislike"
         confidence = float(base_result['score'])
 
         # Check for sarcasm
-        # sarcasm_detected = False
-        sarcasm = detect_sarcasm(text)
-        if sarcasm['is_sarcastic'] and sarcasm['confidence'] > 0.70:
-            # Debugging.
-            print("Debugging: Sarcasm has detected!!!")
-            logger.info(f"Sarcasm detected with confidence {sarcasm['confidence']}")
+        sarcasm_result = SARCASM_DETECTOR.detect_sarcasm(text)
+        is_sarcastic = sarcasm_result['is_sarcastic'] and sarcasm_result['confidence'] > 0.65
+        
+        if is_sarcastic:
+            print("Debugging: is_sarcastic has worked!!!")
+            logger.info(f"Sarcasm detected with confidence {sarcasm_result['confidence']}")
             # Flip the sentiment for sarcastic comments
-            sentiment = "Dislike" if sentiment == "Like" else "Like"
-            confidence = max(confidence, sarcasm['confidence'])
+            final_sentiment = "Dislike" if base_sentiment == "Like" else "Like"
+            # Boost confidence when sarcasm is detected
+            confidence = max(confidence, sarcasm_result['confidence'])
+        else:
+            final_sentiment = base_sentiment
 
         return {
-            "sentiment": sentiment,
+            "sentiment": final_sentiment,
             "confidence": round(confidence, 3),
             "translated": translated,
-            "is_sarcastic": sarcasm['is_sarcastic'],  # Return boolean
+            "is_sarcastic": is_sarcastic,
             "device": device
         }
 
     except Exception as e:
         logger.error(f"Sentiment analysis failed: {str(e)}")
-        raise
+        return {
+            "sentiment": "Error",
+            "confidence": 0.0,
+            "translated": False,
+            "is_sarcastic": False,
+            "error": str(e)
+        }

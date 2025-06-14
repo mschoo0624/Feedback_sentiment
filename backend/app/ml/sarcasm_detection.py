@@ -21,7 +21,7 @@ else:
 
 class AdvancedSarcasmDetector:
     def __init__(self):
-        print("Debugging: Initializing Advanced Sarcasm Detector...")
+        logger.info("Initializing Advanced Sarcasm Detector...")
         
         # Load multiple models for ensemble approach
         self.models = self._load_models()
@@ -44,26 +44,28 @@ class AdvancedSarcasmDetector:
             ]
         }
         
-        print("Debugging: Advanced Sarcasm Detector initialized!")
+        logger.info("Advanced Sarcasm Detector initialized!")
 
     def _load_models(self) -> Dict:
         """Load multiple models for ensemble prediction"""
         models = {}
         
         try:
-            # Model 1: Twitter RoBERTa (your current model)
-            print("Loading Twitter RoBERTa model...")
+            # Model 1: Twitter RoBERTa
+            logger.info("Loading Twitter RoBERTa model...")
             tokenizer1 = AutoTokenizer.from_pretrained("cardiffnlp/twitter-roberta-base-irony")
             model1 = AutoModelForSequenceClassification.from_pretrained("cardiffnlp/twitter-roberta-base-irony")
             models['twitter_roberta'] = pipeline(
                 "text-classification", 
                 model=model1, 
                 tokenizer=tokenizer1, 
-                device=device
+                device=device,
+                truncation=True,
+                max_length=128
             )
             
             # Model 2: Alternative sarcasm detection model
-            print("Loading alternative sarcasm model...")
+            logger.info("Loading alternative sarcasm model...")
             try:
                 tokenizer2 = AutoTokenizer.from_pretrained("helinivan/english-sarcasm-detector")
                 model2 = AutoModelForSequenceClassification.from_pretrained("helinivan/english-sarcasm-detector")
@@ -71,38 +73,43 @@ class AdvancedSarcasmDetector:
                     "text-classification",
                     model=model2,
                     tokenizer=tokenizer2,
-                    device=device
+                    device=device,
+                    truncation=True,
+                    max_length=128
                 )
             except Exception as e:
-                print(f"Could not load second model: {e}")
+                logger.warning(f"Could not load second model: {e}")
             
-            # Model 3: Sentiment-based approach (RoBERTa sentiment)
-            print("Loading sentiment model for context...")
+            # Model 3: Sentiment-based approach
+            logger.info("Loading sentiment model for context...")
             try:
                 models['sentiment'] = pipeline(
                     "sentiment-analysis",
                     model="cardiffnlp/twitter-roberta-base-sentiment-latest",
-                    device=device
+                    device=device,
+                    truncation=True,
+                    max_length=128
                 )
             except Exception as e:
-                print(f"Could not load sentiment model: {e}")
+                logger.warning(f"Could not load sentiment model: {e}")
                 
         except Exception as e:
-            print(f"Error loading models: {e}")
+            logger.error(f"Error loading models: {e}")
+            raise
             
         return models
 
     def _preprocess_text(self, text: str) -> str:
         """Enhanced text preprocessing"""
-        # Convert to lowercase for pattern matching
-        text_lower = text.lower()
+        # Remove URLs and mentions
+        text = re.sub(r"http\S+|@\w+", "", text)
         
         # Normalize repeated punctuation
-        text_normalized = re.sub(r'[!]{2,}', '!!', text)
-        text_normalized = re.sub(r'[?]{2,}', '??', text_normalized)
-        text_normalized = re.sub(r'[.]{3,}', '...', text_normalized)
+        text = re.sub(r'[!]{2,}', '!!', text)
+        text = re.sub(r'[?]{2,}', '??', text)
+        text = re.sub(r'[.]{3,}', '...', text)
         
-        return text_normalized
+        return text
 
     def _extract_linguistic_features(self, text: str) -> Dict:
         """Extract linguistic features that indicate sarcasm"""
@@ -155,12 +162,12 @@ class AdvancedSarcasmDetector:
         # Check for sentiment analysis if available
         if 'sentiment' in self.models:
             try:
-                sentiment_result = self.models['sentiment'](text)[0]
+                sentiment_result = self.models['sentiment'](text[:512])[0]  # Truncate for safety
                 # If positive words but negative sentiment, could be sarcasm
                 if has_positive and sentiment_result['label'] == 'LABEL_0':  # Negative
                     context['sentiment_mismatch'] = True
             except Exception as e:
-                print(f"Sentiment analysis error: {e}")
+                logger.warning(f"Sentiment analysis error: {e}")
         
         return context
 
@@ -183,7 +190,7 @@ class AdvancedSarcasmDetector:
         # Twitter RoBERTa prediction
         if 'twitter_roberta' in self.models:
             try:
-                result = self.models['twitter_roberta'](processed_text)[0]
+                result = self.models['twitter_roberta'](processed_text[:512])[0]  # Truncate
                 # Convert label to boolean (IRONY = sarcastic)
                 is_sarcastic = result['label'] == 'IRONY'
                 confidence = result['score'] if is_sarcastic else 1 - result['score']
@@ -194,12 +201,12 @@ class AdvancedSarcasmDetector:
                     'is_sarcastic': is_sarcastic
                 }
             except Exception as e:
-                print(f"Twitter RoBERTa error: {e}")
+                logger.warning(f"Twitter RoBERTa error: {e}")
         
         # Alternative sarcasm detector
         if 'sarcasm_detector' in self.models:
             try:
-                result = self.models['sarcasm_detector'](processed_text)[0]
+                result = self.models['sarcasm_detector'](processed_text[:512])[0]  # Truncate
                 # This model might have different labels, adjust accordingly
                 is_sarcastic = result['label'] in ['SARCASM', '1', 'sarcastic']
                 confidence = result['score'] if is_sarcastic else 1 - result['score']
@@ -210,11 +217,11 @@ class AdvancedSarcasmDetector:
                     'is_sarcastic': is_sarcastic
                 }
             except Exception as e:
-                print(f"Sarcasm detector error: {e}")
+                logger.warning(f"Sarcasm detector error: {e}")
         
         # Combine predictions using weighted ensemble
         if model_predictions:
-            model_confidence = np.mean(model_predictions)
+            model_confidence = np.mean(model_predictions) if model_predictions else 0.0
         else:
             model_confidence = 0.0
         
@@ -229,15 +236,12 @@ class AdvancedSarcasmDetector:
         
         # Context adjustments
         if context_analysis['sentiment_mismatch']:
-            final_confidence += 0.1
+            final_confidence = min(final_confidence + 0.15, 1.0)
         if context_analysis['has_contrast']:
-            final_confidence += 0.1
-        
-        # Ensure confidence is between 0 and 1
-        final_confidence = min(max(final_confidence, 0.0), 1.0)
+            final_confidence = min(final_confidence + 0.15, 1.0)
         
         # Determine if sarcastic (threshold can be adjusted)
-        threshold = 0.5
+        threshold = 0.6  # Higher threshold to reduce false positives
         is_sarcastic = final_confidence > threshold
         
         return {
@@ -250,21 +254,4 @@ class AdvancedSarcasmDetector:
                 "model_confidence": round(model_confidence, 3),
                 "linguistic_score": round(linguistic_features['linguistic_score'], 3)
             }
-        }
-
-# Initialize the detector
-print("Debugging: Creating detector instance...")
-advanced_detector = AdvancedSarcasmDetector()
-
-def detect_sarcasm(text: str) -> Dict:
-    try:
-        result = advanced_detector.detect_sarcasm(text)
-        print("Advanced Sarcasm Function Has Worked Correctly!!!")
-        return result
-    except Exception as e:
-        print(f"Sarcasm detection error: {e}")
-        return {
-            "is_sarcastic": False,
-            "confidence": 0.0,
-            "details": f"Error: {str(e)}"
         }

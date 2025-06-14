@@ -1,30 +1,32 @@
-# Other Libraries 
 from fastapi import FastAPI, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Optional  # For optional fields
-# Other files. 
+import os
 from app.database import SessionLocal, engine
 from app import models
 from app.ml.sentiment import analyze_sentiment
 from app.schemas import FeedbackOut, FeedbackIn
 from app.crud import save_feedback
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Ensure DB directory exists
-import os
 os.makedirs('./DB', exist_ok=True)
 
-print("Creating tables with new schema...")
+logger.info("Creating database tables...")
 models.Base.metadata.create_all(bind=engine)
-print("Tables recreated successfully with correct column names!")
+logger.info("Tables created successfully!")
 
 # FastAPI app instance
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # You can replace "*" with specific frontend origins in production
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -38,37 +40,49 @@ def get_db():
     finally:
         db.close()
 
-# Root route (health check)
+# Root route
 @app.get("/")
 def read_root():
     return {"message": "FeedbackSentinel is running 🚀"}
 
-# Main sentiment analysis endpoint
+# Sentiment analysis endpoint
 @app.post("/analyze", response_model=FeedbackOut)
 def analyze_feedback(request: FeedbackIn, db: Session = Depends(get_db)):
     try:
-        result = analyze_sentiment(
-            text=request.text,
-            db_session=db
-        )
-        print("Debugging: main.py it worked here(1)!!!")
+        logger.info(f"Analyzing text: {request.text[:50]}...")
+        result = analyze_sentiment(text=request.text)
+        
         feedback_obj = save_feedback(
             db=db,
             data=request,
-            sentiment=result["sentiment"],  # Now comes before optional args
-            is_sarcastic=result["is_sarcastic"],  # Changed from get("sarcasm")
-            was_translated=result["translated"],  # Changed from get("translate")
-            confidence=result.get("confidence")
+            sentiment=result["sentiment"],
+            is_sarcastic=result["is_sarcastic"],
+            was_translated=result["translated"],
+            confidence=result["confidence"]
         )
-        print("Debugging: main.py before returning")
+        
+        # Convert integers back to booleans
+        is_sarcastic_bool = bool(feedback_obj.is_sarcastic) if feedback_obj.is_sarcastic is not None else None
+        was_translated_bool = bool(feedback_obj.was_translated) if feedback_obj.was_translated is not None else None
+        
         return FeedbackOut(
             text=feedback_obj.text,
-            is_sarcastic=feedback_obj.is_sarcastic,
-            was_translated=feedback_obj.was_translated,
+            is_sarcastic=is_sarcastic_bool,
+            was_translated=was_translated_bool,
             sentiment=feedback_obj.sentiment,
-            confidence=feedback_obj.confidence  # Fixed typo: was "confidenc"
+            confidence=feedback_obj.confidence
         )
         
     except Exception as e:
-        print("Debugging: Error!!!")
+        logger.error(f"Analysis failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Debug endpoint for sarcasm detection
+@app.post("/debug-sarcasm")
+def debug_sarcasm(text: str):
+    try:
+        from app.ml.sarcasm_detection import AdvancedSarcasmDetector
+        detector = AdvancedSarcasmDetector()
+        return detector.detect_sarcasm(text)
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
