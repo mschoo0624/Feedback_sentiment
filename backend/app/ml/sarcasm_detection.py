@@ -5,6 +5,9 @@ import re
 from typing import Dict, List, Optional
 import numpy as np
 
+# Pre-trained model
+MODEL_PATH = "app/ml/sarcasm_sentiment_model"
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -53,8 +56,22 @@ class AdvancedSarcasmDetector:
         try:
             # Model 1: Twitter RoBERTa
             logger.info("Loading Twitter RoBERTa model...")
-            tokenizer1 = AutoTokenizer.from_pretrained("cardiffnlp/twitter-roberta-base-irony")
-            model1 = AutoModelForSequenceClassification.from_pretrained("cardiffnlp/twitter-roberta-base-irony")
+            # tokenizer1 = AutoTokenizer.from_pretrained("cardiffnlp/twitter-roberta-base-irony")
+            # model1 = AutoModelForSequenceClassification.from_pretrained("cardiffnlp/twitter-roberta-base-irony")
+            
+            # Some changes here. 
+            tokenizer1 = AutoTokenizer.from_pretrained(
+                MODEL_PATH,
+                local_files_only=True,
+                use_auth_token=False
+            )
+
+            model1 = AutoModelForSequenceClassification.from_pretrained(
+                MODEL_PATH,
+                local_files_only=True,
+                use_auth_token=False
+)
+            
             models['twitter_roberta'] = pipeline(
                 "text-classification", 
                 model=model1, 

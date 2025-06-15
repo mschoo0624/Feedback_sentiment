@@ -8,3 +8,13 @@ torch
 sentencepiece
 langdetect
 pydantic
+numpy
+tensorflow
+transformers
+datasets
+pandas
+seaborn
+scikit-learn
+tabulate
+matplotlib
+tf-keras
