@@ -35,7 +35,6 @@ Chrome extension and Slackbot for in-the-moment sentiment classification.
 ## 🛠️ Goal: Build a FastAPI server that exposes a /classify endpoint to accept feedback text and return sentiment.
 
 
-
 # 📌 TODO / Future Features
 - Feedback dashboard (with Plotly/Dash)
 - User auth & history tracking

@@ -1,12 +1,18 @@
+# Standard libraries
 import os
 import random
-import json
+
+# Data science & visualization
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+
+# PyTorch and evaluation
 import torch
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, classification_report
+
+# Hugging Face Transformers and datasets
 from transformers import (
     AutoTokenizer,
     AutoModelForSequenceClassification,
@@ -17,13 +23,15 @@ from transformers import (
 from datasets import load_dataset, Dataset
 import logging
 
+# Ensure proper memory fallback on Apple Silicon
 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"
 
-# Setup logging
+# Setup logger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Detect and set device
 if torch.backends.mps.is_available():
     torch_device = torch.device("mps")
     logger.info("Using device: MPS (Apple Silicon)")
@@ -34,324 +42,273 @@ else:
     torch_device = torch.device("cpu")
     logger.info("Using device: CPU")
 
-# Configure visualization
+# Visualization config
 sns.set(style="whitegrid", palette="muted")
 plt.rcParams['figure.figsize'] = (12, 8)
 
-# Stage 1: Enhanced dataset preparation
-def pre_labeled_datasets(max_samples=None):
-    """Load sarcasm and sentiment datasets, balance classes"""
-    # Load datasets
-    sarcasm_ds = load_dataset("tweet_eval", "irony")
-    sentiment_ds = load_dataset("amazon_polarity")
-    
+# Stage 1: Load and combine diverse labeled datasets
+def create_diverse_dataset(max_samples_per_source=2000):
+    """Load sentiment datasets and add custom sarcastic examples, then balance them"""
     data = []
-    
-    # Process sarcasm dataset
-    for example in sarcasm_ds["train"]:
-        label = "Dislike" if example["label"] == 1 else "Like"
-        data.append({"text": example["text"], "label": label})
-    
-    # Balance sentiment dataset
-    positive = [ex for ex in sentiment_ds["train"] if ex["label"] == 1][:3000]
-    negative = [ex for ex in sentiment_ds["train"] if ex["label"] == 0][:3000]
-    
-    for example in positive + negative:
+
+    # Amazon Reviews
+    logger.info("Loading Amazon reviews...")
+    amazon_ds = load_dataset("amazon_polarity")
+    positive_amazon = [ex for ex in amazon_ds["train"] if ex["label"] == 1][:max_samples_per_source]
+    negative_amazon = [ex for ex in amazon_ds["train"] if ex["label"] == 0][:max_samples_per_source]
+
+    # Append Amazon data with labels
+    for example in positive_amazon:
+        data.append({"text": example["content"], "label": "Like", "source": "amazon"})
+    for example in negative_amazon:
+        data.append({"text": example["content"], "label": "Dislike", "source": "amazon"})
+
+    # IMDB Reviews
+    logger.info("Loading IMDB reviews...")
+    imdb_ds = load_dataset("imdb")
+    positive_imdb = [ex for ex in imdb_ds["train"] if ex["label"] == 1][:max_samples_per_source]
+    negative_imdb = [ex for ex in imdb_ds["train"] if ex["label"] == 0][:max_samples_per_source]
+
+    # Truncate long reviews to avoid exceeding max token length
+    for example in positive_imdb:
+        text = example["text"][:500] + "..." if len(example["text"]) > 500 else example["text"]
+        data.append({"text": text, "label": "Like", "source": "imdb"})
+    for example in negative_imdb:
+        text = example["text"][:500] + "..." if len(example["text"]) > 500 else example["text"]
+        data.append({"text": text, "label": "Dislike", "source": "imdb"})
+
+    # Stanford Sentiment Treebank (SST-2)
+    logger.info("Loading Stanford Sentiment...")
+    sst_ds = load_dataset("sst2")
+    sst_samples = sst_ds["train"].shuffle(seed=42).select(range(max_samples_per_source * 2))
+    for example in sst_samples:
         label = "Like" if example["label"] == 1 else "Dislike"
-        data.append({"text": example["content"], "label": label})
-    
+        data.append({"text": example["sentence"], "label": label, "source": "sst"})
+
+    # Manually added sarcastic examples
+    logger.info("Adding custom sarcastic examples...")
+    # sarcastic_examples = [ ... ]  # (omitted here for brevity, your list is great)
+    sarcastic_examples = [
+        ("Oh great, another amazing product!", "Dislike"),
+        ("Perfect, just what I didn't need", "Dislike"),
+        ("Fantastic service, if you enjoy waiting 3 hours", "Dislike"),
+        ("What a brilliant idea - not!", "Dislike"),
+        ("I'm thrilled it arrived broken", "Dislike"),
+        ("Wonderful customer service, they hung up on me", "Dislike"),
+        ("Amazing quality, it broke immediately", "Dislike"),
+        ("Love how it doesn't work at all", "Dislike"),
+        ("Great design, really user-friendly", "Dislike"),
+        ("So helpful, they ignored all my questions", "Dislike"),
+        ("I absolutely love this product", "Like"),
+        ("Excellent quality and fast shipping", "Like"),
+        ("Highly recommend to everyone", "Like"),
+        ("Outstanding customer service", "Like"),
+        ("Perfect for my needs", "Like"),
+        ("Great value for money", "Like"),
+        ("Works exactly as described", "Like"),
+        ("Very satisfied with purchase", "Like"),
+        ("Top quality materials", "Like"),
+        ("Exceeded my expectations", "Like"),
+        ("Terrible product, complete waste of money", "Dislike"),
+        ("Worst purchase I've ever made", "Dislike"),
+        ("Broke after one day", "Dislike"),
+        ("Would not recommend to anyone", "Dislike"),
+        ("Poor quality and overpriced", "Dislike"),
+        ("Completely useless", "Dislike"),
+        ("Customer service was horrible", "Dislike"),
+        ("Doesn't work as advertised", "Dislike"),
+        ("Cheaply made and overpriced", "Dislike"),
+        ("Save your money, buy something else", "Dislike"),
+    ]
+
+    for text, label in sarcastic_examples:
+        data.append({"text": text, "label": label, "source": "custom"})
+
+    # Shuffle and balance dataset to max 5000 per class
     random.shuffle(data)
-    
-    # Apply sampling if needed for fallback
-    if max_samples and len(data) > max_samples:
-        data = random.sample(data, max_samples)
-    
-    # Analyze class distribution
-    df = pd.DataFrame(data) 
-    print("\n📈 Class Distribution:")
-    print(df["label"].value_counts())
-    
-    # Visualization
-    plt.figure()
-    sns.countplot(x="label", data=df)
-    plt.title("Class Distribution")
-    plt.savefig("class_distribution.png")
+    df = pd.DataFrame(data)
+    max_per_class = min(5000, df['label'].value_counts().min())
+    like_samples = df[df['label'] == 'Like'].sample(n=max_per_class, random_state=42)
+    dislike_samples = df[df['label'] == 'Dislike'].sample(n=max_per_class, random_state=42)
+    balanced_df = pd.concat([like_samples, dislike_samples])
+    balanced_data = balanced_df.to_dict('records')
+    random.shuffle(balanced_data)
+
+    # Log and visualize data distribution
+    logger.info(f"Final dataset: {len(balanced_data)} samples")
+    logger.info("Source distribution:")
+    print(balanced_df['source'].value_counts())
+
+    # Plot distribution
+    plt.figure(figsize=(15, 5))
+    plt.subplot(1, 3, 1)
+    sns.countplot(data=balanced_df, x='label')
+    plt.title('Label Distribution')
+
+    plt.subplot(1, 3, 2)
+    sns.countplot(data=balanced_df, x='source')
+    plt.title('Source Distribution')
+    plt.xticks(rotation=45)
+
+    plt.subplot(1, 3, 3)
+    sns.countplot(data=balanced_df, x='source', hue='label')
+    plt.title('Source vs Label Distribution')
+    plt.xticks(rotation=45)
+
+    plt.tight_layout()
+    plt.savefig("dataset_analysis.png", dpi=300, bbox_inches='tight')
     plt.close()
-    
-    return data
+
+    return balanced_data
 
 # Label mapping
 LABEL_MAP = {"Dislike": 0, "Like": 1}
 
-# Tokenization
-def tokenize(examples, tokenizer, max_length=64):
-    """Tokenize text and map labels with adjustable length"""
-    texts = examples['text']
-    
+# Tokenization logic with cleaning
+def tokenize_function(examples, tokenizer, max_length=64):
+    """Clean text and tokenize using provided tokenizer"""
+    cleaned_texts = [' '.join(text.split()) for text in examples['text']]
     encoding = tokenizer(
-        texts,
+        cleaned_texts,
         truncation=True,
         padding=False,
-        max_length=max_length
+        max_length=max_length,
+        return_attention_mask=True
     )
-    encoding['label'] = [LABEL_MAP[label] for label in examples['label']]
+    encoding['labels'] = [LABEL_MAP[label] for label in examples['label']]
     return encoding
 
-# Compute metrics
+# Evaluation metrics for validation/testing
 def compute_metrics(eval_pred):
-    """Calculate accuracy and F1 score"""
+    """Calculate evaluation metrics: accuracy and F1 scores"""
     logits, labels = eval_pred
-    predictions = torch.argmax(torch.tensor(logits), dim=-1)
+    predictions = np.argmax(logits, axis=-1)
     return {
         "accuracy": accuracy_score(labels, predictions),
-        "f1": f1_score(labels, predictions, average="weighted")
+        "f1_weighted": f1_score(labels, predictions, average='weighted'),
+        "f1_macro": f1_score(labels, predictions, average='macro')
     }
 
-# 🧠 CPU fallback training (for extreme low-memory cases)
-def train_model_cpu_fallback():
-    """Low-memory CPU training with tiny model"""
-    print("\n⚠️ Switching to low-memory CPU fallback mode")
-    torch_device = torch.device("cpu")
-    model_name = "prajjwal1/bert-tiny"
-    max_samples = 2000
+# Main training function
+def train_improved_model(model_name="distilbert-base-uncased"):
+    """Train sentiment classifier using diverse data and a transformer model"""
     
-    # Prepare dataset
-    raw_data = pre_labeled_datasets(max_samples=max_samples)
+    logger.info("🔄 Creating diverse dataset...")
+    raw_data = create_diverse_dataset(max_samples_per_source=2000)
+
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    
-    # Create dataset with shorter sequences
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token  # Handle tokenizers missing pad_token
+
+    # Apply tokenization
     dataset = Dataset.from_list(raw_data)
     dataset = dataset.map(
-        lambda x: tokenize(x, tokenizer, max_length=32), 
-        batched=True
+        lambda x: tokenize_function(x, tokenizer, max_length=64),
+        batched=True,
+        remove_columns=['text', 'source', 'label']
     )
-    dataset = dataset.remove_columns(['text'])
-    
-    # Train-test split
-    dataset = dataset.train_test_split(test_size=0.2)
-    
-    # Initialize model
+
+    # Train/val/test split (70/15/15)
+    train_test = dataset.train_test_split(test_size=0.3, seed=42)
+    val_test = train_test['test'].train_test_split(test_size=0.5, seed=42)
+    train_dataset = train_test['train']
+    val_dataset = val_test['train']
+    test_dataset = val_test['test']
+
+    logger.info("🤖 Loading pre-trained model...")
     model = AutoModelForSequenceClassification.from_pretrained(
-        model_name, 
+        model_name,
         num_labels=2,
-        id2label={0: "Dislike", 1: "Like"}
+        id2label={0: "Dislike", 1: "Like"},
+        label2id={"Dislike": 0, "Like": 1},
+        ignore_mismatched_sizes=True  # Avoid crash if head size doesn't match
     )
     model.to(torch_device)
-    
-    # Training arguments for CPU fallback
+
+    # Training configuration
     training_args = TrainingArguments(
         output_dir="./results",
-        eval_strategy="epoch",
-        save_strategy="epoch",
-        learning_rate=5e-5,
-        per_device_train_batch_size=4,
-        per_device_eval_batch_size=4,
+        eval_strategy="steps",
+        eval_steps=200,
+        save_strategy="steps",
+        save_steps=200,
+        learning_rate=2e-5,
+        per_device_train_batch_size=8,
+        per_device_eval_batch_size=8,
+        gradient_accumulation_steps=1,
         num_train_epochs=2,
         weight_decay=0.01,
         logging_dir="./logs",
         logging_steps=50,
         report_to="none",
         load_best_model_at_end=True,
-        save_total_limit=1,
-        no_cuda=True,
-        use_mps_device=False,
-        fp16=False
+        metric_for_best_model="f1_weighted",
+        greater_is_better=True,
+        # fp16=torch_device.type == "cuda",  # Enable mixed precision only on CUDA
+        # bf16=torch_device.type == "mps",   # Enable bfloat16 only on M1/M2
+        save_total_limit=2,
+        fp16=torch_device.type == "cuda",
+        bf16=False,  # <- Force disabled
     )
-    
-    # Create Trainer
-    trainer_obj = Trainer(
+
+    # Trainer initialization
+    trainer = Trainer(
         model=model,
         args=training_args,
-        train_dataset=dataset["train"],
-        eval_dataset=dataset["test"],
+        train_dataset=train_dataset,
+        eval_dataset=val_dataset,
         tokenizer=tokenizer,
         compute_metrics=compute_metrics,
-        data_collator=DataCollatorWithPadding(tokenizer)
+        data_collator=DataCollatorWithPadding(tokenizer, padding=True)
     )
-    
-    # Train model
-    print("\n🚀 Starting CPU fallback training...")
-    trainer_obj.train()
-    
-    # Evaluate
-    print("\n📈 Evaluating model...")
-    metrics = trainer_obj.evaluate()
-    print("\n✅ Evaluation Results (CPU Fallback):", metrics)
-    
-    # Get predictions
-    predictions = trainer_obj.predict(dataset["test"])
+
+    # Start training
+    logger.info("🚀 Starting training...")
+    trainer.train()
+
+    # Final evaluation
+    logger.info("📈 Final evaluation on test set...")
+    test_results = trainer.evaluate(test_dataset)
+    logger.info(f"Test Results: {test_results}")
+
+    # Generate classification report
+    predictions = trainer.predict(test_dataset)
     y_true = predictions.label_ids
     y_pred = np.argmax(predictions.predictions, axis=-1)
-    
-    # Classification report
-    print("\n📝 Classification Report:")
+    print("\n📝 Detailed Classification Report:")
     print(classification_report(y_true, y_pred, target_names=["Dislike", "Like"]))
-    
-    # Confusion matrix
-    plt.figure()
+
+    # Confusion matrix visualization
+    plt.figure(figsize=(8, 6))
     cm = confusion_matrix(y_true, y_pred)
-    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
-                xticklabels=["Dislike", "Like"],
-                yticklabels=["Dislike", "Like"])
-    plt.title("Confusion Matrix (CPU Fallback)")
-    plt.savefig("confusion_matrix_fallback.png")
-    
-    # Sanity checks
-    print("\n🧪 Sanity Checks:")
-    test_samples = [
-        ("I love this product!", "Like"),
-        ("Worst experience ever", "Dislike"),
-        ("Perfect, just what I didn't need", "Dislike"),
-        ("Great job breaking it", "Dislike")
-    ]
-    
-    for text, expected in test_samples:
-        inputs = tokenizer(text, return_tensors="pt", truncation=True)
-        with torch.no_grad():
-            outputs = model(**inputs)
-        probs = torch.softmax(outputs.logits, dim=-1)
-        pred_label = "Like" if torch.argmax(probs) == 1 else "Dislike"
-        print(f"'{text}'\n  Expected: {expected}, Predicted: {pred_label}")
-    
-    # Save model
-    print("\n💾 Saving final model...")
-    model.save_pretrained("./sarcasm_sentiment_model")
-    tokenizer.save_pretrained("./sarcasm_sentiment_model")
+    sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=["Dislike", "Like"], yticklabels=["Dislike", "Like"])
+    plt.title("Confusion Matrix - Improved Model")
+    plt.ylabel("True Label")
+    plt.xlabel("Predicted Label")
+    plt.savefig("improved_confusion_matrix.png", dpi=300, bbox_inches='tight')
+    plt.close()
 
-# Main training function
-def trainer(model_name: str = "distilroberta-base", use_fallback=False):
-    """End-to-end training with fallback option"""
-    if use_fallback:
-        return train_model_cpu_fallback()
-        
-    print("\n🔄 Loading and preprocessing dataset...")
-    try:
-        raw_data = pre_labeled_datasets()
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        
-        # Create dataset
-        dataset = Dataset.from_list(raw_data)
-        dataset = dataset.map(
-            lambda x: tokenize(x, tokenizer, max_length=64), 
-            batched=True
-        )
-        dataset = dataset.remove_columns(['text'])
-        
-        # Train-test split
-        print("\n📊 Splitting dataset...")
-        dataset = dataset.train_test_split(test_size=0.2, seed=42)
-        train_dataset = dataset["train"]
-        eval_dataset = dataset["test"]
-        
-        # Initialize model
-        print("\n🤖 Initializing model...")
-        model = AutoModelForSequenceClassification.from_pretrained(
-            model_name, 
-            num_labels=2,
-            id2label={0: "Dislike", 1: "Like"}
-        )
-        model.to(torch_device)
-        
-        # Training arguments
-        training_args = TrainingArguments(
-            output_dir="./results",
-            eval_strategy="steps",
-            eval_steps=200,
-            save_strategy="steps",
-            save_steps=200,
-            learning_rate=2e-5,
-            per_device_train_batch_size=4,
-            per_device_eval_batch_size=4,
-            gradient_accumulation_steps=2,
-            num_train_epochs=3,
-            weight_decay=0.01,
-            logging_dir="./logs",
-            logging_steps=50,
-            report_to="none",
-            load_best_model_at_end=True,
-            fp16=torch_device.type != "cpu",
-        )
-        
-        # Create Trainer
-        trainer_obj = Trainer(
-            model=model,
-            args=training_args,
-            train_dataset=train_dataset,
-            eval_dataset=eval_dataset,
-            tokenizer=tokenizer,
-            compute_metrics=compute_metrics,
-            data_collator=DataCollatorWithPadding(tokenizer)
-        )
-        
-        # Train model
-        print("\n🚀 Starting training...")
-        train_results = trainer_obj.train()
-        
-        # Evaluate
-        print("\n📈 Evaluating model...")
-        metrics = trainer_obj.evaluate()
-        print("\n✅ Evaluation Results:", metrics)
-        
-        # Get predictions
-        predictions = trainer_obj.predict(eval_dataset)
-        y_true = predictions.label_ids
-        y_pred = np.argmax(predictions.predictions, axis=-1)
-        
-        # Classification report
-        print("\n📝 Classification Report:")
-        print(classification_report(y_true, y_pred, target_names=["Dislike", "Like"]))
-        
-        # Confusion matrix
-        plt.figure()
-        cm = confusion_matrix(y_true, y_pred)
-        sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
-                    xticklabels=["Dislike", "Like"],
-                    yticklabels=["Dislike", "Like"])
-        plt.title("Confusion Matrix")
-        plt.savefig("confusion_matrix.png")
-        
-        # Sanity checks
-        print("\n🧪 Sanity Checks:")
-        test_samples = [
-            ("I love this product!", "Like"),
-            ("Worst experience ever", "Dislike"),
-            ("Perfect, just what I didn't need", "Dislike"),
-            ("Great job breaking it", "Dislike")
-        ]
-        
-        for text, expected in test_samples:
-            inputs = tokenizer(text, return_tensors="pt", truncation=True).to(torch_device)
-            with torch.no_grad():
-                outputs = model(**inputs)
-            probs = torch.softmax(outputs.logits, dim=-1)
-            pred_label = "Like" if torch.argmax(probs) == 1 else "Dislike"
-            print(f"'{text}'\n  Expected: {expected}, Predicted: {pred_label}")
-        
-        # Save model
-        print("\n💾 Saving final model...")
-        model.save_pretrained("./sarcasm_sentiment_model")
-        tokenizer.save_pretrained("./sarcasm_sentiment_model")
-        
-    except RuntimeError as e:
-        if "out of memory" in str(e).lower() or "MPS backend" in str(e):
-            print(f"\n⚠️ Memory error: {str(e)[:200]}...")
-            print("Switching to CPU fallback training...")
-            train_model_cpu_fallback()
-        else:
-            raise e
+    # Save model locally
+    logger.info("💾 Saving improved model...")
+    model.save_pretrained("./improved_sentiment_model")
+    tokenizer.save_pretrained("./improved_sentiment_model")
 
-# Main execution
+    logger.info("✅ Training completed successfully!")
+    logger.info("📁 Model saved to: ./improved_sentiment_model")
+    logger.info("🧪 Use the separate test script to evaluate specific examples")
+    return model, tokenizer
+
+# Entry point
 if __name__ == "__main__":
     # Set seeds for reproducibility
-    os.environ['PYTHONHASHSEED'] = '42'
     random.seed(42)
     np.random.seed(42)
     torch.manual_seed(42)
-    
-    # First try standard training
+
     try:
-        trainer(model_name="distilroberta-base")
+        # First attempt with distilbert
+        train_improved_model(model_name="distilbert-base-uncased")
     except Exception as e:
-        print(f"\n⚠️ Training failed: {str(e)[:200]}...")
-        print("Attempting CPU fallback training...")
-        trainer(use_fallback=True)
+        logger.error(f"Training failed: {e}")
+        logger.info("Trying with an even smaller model...")
+        train_improved_model(model_name="albert-base-v2")

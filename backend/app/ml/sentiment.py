@@ -58,6 +58,7 @@ def analyze_sentiment(text: str, company_id: int = None, db_session=None) -> Dic
         # Get sentiment prediction using dedicated model
         base_result = SENTIMENT_MODEL(text[:512])[0]  # Truncate for safety
         
+        # Changes
         # Map 3-class sentiment to our 2-class system
         if base_result['label'] == 'LABEL_2':  # Positive
             base_sentiment = "Like"
@@ -66,6 +67,14 @@ def analyze_sentiment(text: str, company_id: int = None, db_session=None) -> Dic
         else:  # Neutral (LABEL_1)
             # Treat neutral as negative by default
             base_sentiment = "Dislike"
+        
+        # label = base_result['label']
+        # if label == "LABEL_2":  # POSITIVE
+        #     base_sentiment = "Like"
+        # elif label == "LABEL_0":  # NEGATIVE
+        #     base_sentiment = "Dislike"
+        # else:
+        #     base_sentiment = "Dislike"  # Treat neutral as Dislike (or create 3-class)
             
         confidence = float(base_result['score'])
         
@@ -78,29 +87,28 @@ def analyze_sentiment(text: str, company_id: int = None, db_session=None) -> Dic
         
         # Handle numpy types for confidence values
         sarcasm_confidence = float(sarcasm_result['confidence'])
-        is_sarcastic = sarcasm_result['is_sarcastic'] and sarcasm_confidence > 0.4
+        # Changes
+        # is_sarcastic = sarcasm_result['is_sarcastic'] and sarcasm_confidence > 0.4
+        is_sarcastic = sarcasm_result['is_sarcastic'] and sarcasm_confidence > 0.7
         
         print(f"DEBUG: is_sarcastic = {is_sarcastic}")
         
         if is_sarcastic:
-            print("✅ DEBUGGING: Sarcasm has detected!!!")
-            print("✅ DEBUG: SARCASM DETECTED! Flipping sentiment...")
-            logger.info(f"Sarcasm detected with confidence {sarcasm_confidence}")
-            # Flip the sentiment for sarcastic comments
+            # Flip sentiment for sarcastic comments
             final_sentiment = "Dislike" if base_sentiment == "Like" else "Like"
-            # Boost confidence when sarcasm is detected
-            confidence = max(confidence, sarcasm_confidence)
+            # Combine confidences
+            combined_confidence = (confidence + sarcasm_confidence) / 2
         else:
-            print("DEBUG: No sarcasm detected, keeping original sentiment")
             final_sentiment = base_sentiment
+            combined_confidence = confidence
 
         result = {
             "sentiment": final_sentiment,
-            "confidence": round(confidence, 3),
+            "confidence": round(combined_confidence, 3),
             "translated": translated,
-            "is_sarcastic": bool(is_sarcastic),  # Ensure native bool type
-            "device": device,
-            "sarcasm_details": sarcasm_result
+            "is_sarcastic": is_sarcastic,
+            "base_sentiment": base_sentiment,
+            "sarcasm_confidence": round(sarcasm_confidence, 3)
         }
         
         print(f"DEBUG: Final result: {result}")
