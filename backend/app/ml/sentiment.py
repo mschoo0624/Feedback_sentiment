@@ -11,15 +11,18 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 # Optimize for Mac M1/M2 hardware
-if torch.backends.mps.is_available():
-    device = 0  # MPS on Mac
-    logger.info("Using device: MPS")
-elif torch.cuda.is_available():
-    device = 0  # CUDA
-    logger.info("Using device: CUDA")
-else:
-    device = -1  # CPU
-    logger.info("Using device: CPU")
+def _get_device():
+    if torch.backends.mps.is_available():
+        device = 0  # MPS on Mac
+        logger.info("Using device: MPS")
+    elif torch.cuda.is_available():
+        device = 0  # CUDA
+        logger.info("Using device: CUDA")
+    else:
+        device = -1  # CPU
+        logger.info("Using device: CPU")
+        
+device = _get_device()
 
 # Initialize models
 try:
@@ -37,9 +40,7 @@ try:
     
     logger.info("Sentiment model loaded successfully")
     
-    logger.info("Initializing custom sarcasm detector...")
     SARCASM_DETECTOR = CustomSarcasmDetector()  # Use your custom model
-    logger.info("Custom sarcasm detector initialized successfully")
 except Exception as e:
     logger.error(f"Failed to load models: {str(e)}")
     raise
