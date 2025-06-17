@@ -54,10 +54,11 @@ Thumbs.db
 *.pt
 *.onnx
 *.tflite
+*.safetensors
 
 # Training Results and Models (specific to your project)
 backend/app/ml/results/
-backend/app/ml/sarcasm_sentiment_model/
+backend/app/ml/improved_sentiment_model/
 
 # Jupyter/Notebook checkpoints
 .ipynb_checkpoints/
