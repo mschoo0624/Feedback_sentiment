@@ -18,3 +18,4 @@ scikit-learn
 tabulate
 matplotlib
 tf-keras
+pathlib

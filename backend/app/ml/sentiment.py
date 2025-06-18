@@ -6,6 +6,7 @@ from .translation import translate_text
 from .sarcasm_detection import AdvancedSarcasmDetector as CustomSarcasmDetector
 import logging
 import numpy as np
+from pathlib import Path
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -29,7 +30,7 @@ try:
     # Dedicated sentiment model (3-class: negative, neutral, positive)
     # Debugging.
     print("Loading sentiment model...")
-    
+    # initializes a sentiment analysis pipeline which is pre-trained. 
     SENTIMENT_MODEL = pipeline(
         task="sentiment-analysis",
         model="cardiffnlp/twitter-roberta-base-sentiment-latest",
@@ -37,86 +38,111 @@ try:
         truncation=True,
         max_length=128
     )
+    print("✅Sentiment model loaded successfully")
     
-    logger.info("Sentiment model loaded successfully")
+    print("🔄 Loading sarcasm detector...")
+    SARCASM_DETECTOR = CustomSarcasmDetector()
     
-    SARCASM_DETECTOR = CustomSarcasmDetector()  # Use your custom model
+    # model_path = Path("./improved_sentiment_model").resolve()
+    model_path = Path(__file__).resolve().parent / "improved_sentiment_model"
+    assert model_path.exists(), f"Model path not found: {model_path}"
+
+    # Load your improved sarcasm-aware sentiment model
+    print("🔄 Loading improved sarcasm-aware sentiment model...")
+    CUSTOM_MODEL_TOKENIZER = AutoTokenizer.from_pretrained(str(model_path), local_files_only=True)
+    print("DEBUGGING 1")
+    CUSTOM_MODEL = AutoModelForSequenceClassification.from_pretrained(str(model_path), local_files_only=True)
+    print("DEBUGGING 2")
+    CUSTOM_MODEL.to(device)
+    print("DEBUGGING 3")
+    CUSTOM_MODEL.eval()
+    print("✅ Loading improved sarcasm-aware sentiment model has completed!!!")
+    
 except Exception as e:
     logger.error(f"Failed to load models: {str(e)}")
     raise
 
+# Run inference with improved model
+def predict_custom_sentiment(text: str) -> Dict[str, Any]:
+    tokens = CUSTOM_MODEL_TOKENIZER(
+        text,
+        return_tensors="pt",
+        truncation=True,
+        padding=True,
+        max_length=128
+    ).to(device)
+
+    with torch.no_grad():
+        output = CUSTOM_MODEL(**tokens)
+        probs = torch.softmax(output.logits, dim=-1)
+        pred_idx = torch.argmax(probs, dim=-1).item()
+        label = "Like" if pred_idx == 1 else "Dislike"
+        confidence = probs[0][pred_idx].item()
+
+    return {
+        "label": label,
+        "confidence": round(confidence, 3),
+        "probabilities": {
+            "Dislike": round(probs[0][0].item(), 3),
+            "Like": round(probs[0][1].item(), 3)
+        }
+    }
+
 def analyze_sentiment(text: str, company_id: int = None, db_session=None) -> Dict[str, Any]:
     try:
-        # Handle translation if needed
+        # 1. Translate if needed
         translated = False
         if detect(text) != 'en':
-            logger.info(f"Translating non-English text: {text[:50]}...")
+            logger.info("🌐 Translating non-English text")
             text = translate_text(text)
             translated = True
-        
-        print(f"DEBUG: About to analyze text: '{text[:50]}...'")
-        
-        # Get sentiment prediction using dedicated model
-        base_result = SENTIMENT_MODEL(text[:512])[0]  # Truncate for safety
-        
-        # Changes
-        # Map 3-class sentiment to our 2-class system
-        if base_result['label'] == 'LABEL_2':  # Positive
-            base_sentiment = "Like"
-        elif base_result['label'] == 'LABEL_0':  # Negative
-            base_sentiment = "Dislike"
-        else:  # Neutral (LABEL_1)
-            # Treat neutral as negative by default
-            base_sentiment = "Dislike"
-        
-        # label = base_result['label']
-        # if label == "LABEL_2":  # POSITIVE
-        #     base_sentiment = "Like"
-        # elif label == "LABEL_0":  # NEGATIVE
-        #     base_sentiment = "Dislike"
-        # else:
-        #     base_sentiment = "Dislike"  # Treat neutral as Dislike (or create 3-class)
-            
-        confidence = float(base_result['score'])
-        
-        print(f"DEBUG: Base sentiment: {base_sentiment} (confidence: {confidence})")
 
-        # Check for sarcasm using your custom model
-        print(f"DEBUG: Checking for sarcasm...")
+        print(f"📝 Input: '{text[:80]}...'")
+
+        # 2. Run general sentiment analysis
+        base_result = SENTIMENT_MODEL(text[:512])[0]
+        label_map = {
+            "LABEL_2": "Like",     # Positive
+            "LABEL_1": "Neutral",  # Neutral
+            "LABEL_0": "Dislike"   # Negative
+        }
+        base_sentiment = label_map.get(base_result['label'], "Dislike")
+        confidence = float(base_result['score'])
+
+        print(f"🔍 Base sentiment: {base_sentiment} ({confidence:.3f})")
+
+        # 3. Run sarcasm detection
         sarcasm_result = SARCASM_DETECTOR.detect_sarcasm(text)
-        print(f"DEBUG: Sarcasm result: {sarcasm_result}")
-        
-        # Handle numpy types for confidence values
-        sarcasm_confidence = float(sarcasm_result['confidence'])
-        # Changes
-        # is_sarcastic = sarcasm_result['is_sarcastic'] and sarcasm_confidence > 0.4
-        is_sarcastic = sarcasm_result['is_sarcastic'] and sarcasm_confidence > 0.7
-        
-        print(f"DEBUG: is_sarcastic = {is_sarcastic}")
-        
+        is_sarcastic = sarcasm_result["is_sarcastic"] and sarcasm_result["confidence"] > 0.7
+        sarcasm_confidence = float(sarcasm_result["confidence"])
+
+        print(f"🎭 Sarcasm detected? {is_sarcastic} (confidence: {sarcasm_confidence:.3f})")
+
+        # 4. If sarcastic → override using your improved model
         if is_sarcastic:
-            # Flip sentiment for sarcastic comments
-            final_sentiment = "Dislike" if base_sentiment == "Like" else "Like"
-            # Combine confidences
-            combined_confidence = (confidence + sarcasm_confidence) / 2
+            print("Debugging: Sarcasm has detected!!!")
+            custom_result = predict_custom_sentiment(text)
+            final_sentiment = custom_result["label"]
+            final_confidence = (custom_result["confidence"] + sarcasm_confidence) / 2
         else:
             final_sentiment = base_sentiment
-            combined_confidence = confidence
+            final_confidence = confidence
 
+        # 5. Assemble response
         result = {
             "sentiment": final_sentiment,
-            "confidence": round(combined_confidence, 3),
+            "confidence": round(final_confidence, 3),
             "translated": translated,
             "is_sarcastic": is_sarcastic,
             "base_sentiment": base_sentiment,
             "sarcasm_confidence": round(sarcasm_confidence, 3)
         }
-        
-        print(f"DEBUG: Final result: {result}")
+
+        print(f"✅ Final Result: {result}")
         return result
 
     except Exception as e:
-        logger.error(f"Sentiment analysis failed: {str(e)}")
+        logger.error(f"❌ Sentiment analysis failed: {e}")
         return {
             "sentiment": "Error",
             "confidence": 0.0,

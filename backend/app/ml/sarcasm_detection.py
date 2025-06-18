@@ -2,6 +2,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import numpy as np
 import logging
+from pathlib import Path
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -11,14 +12,16 @@ class AdvancedSarcasmDetector:
     A sarcasm-aware sentiment classifier using a custom fine-tuned transformer model.
     """
 
-    def __init__(self, model_path="./improved_sentiment_model"):
-        self.model_path = model_path
+    def __init__(self):
         self.device = self._get_device()
 
+        # Resolve path to local model directory
+        model_path = Path(__file__).resolve().parent / "improved_sentiment_model"
+
         try:
-            logger.info(f"Loading sarcasm-aware model from {model_path}")
-            self.tokenizer = AutoTokenizer.from_pretrained(model_path)
-            self.model = AutoModelForSequenceClassification.from_pretrained(model_path).to(self.device)
+            logger.info(f"🔄 Loading sarcasm-aware model from {model_path}")
+            self.tokenizer = AutoTokenizer.from_pretrained(str(model_path))
+            self.model = AutoModelForSequenceClassification.from_pretrained(str(model_path)).to(self.device)
             self.model.eval()
             logger.info("✅ Sarcasm-aware model loaded successfully")
         except Exception as e:
@@ -27,14 +30,14 @@ class AdvancedSarcasmDetector:
 
     def _get_device(self):
         if torch.backends.mps.is_available():
-            device = 0  # MPS on Mac
             logger.info("Using device: MPS")
+            return torch.device("mps")
         elif torch.cuda.is_available():
-            device = 0  # CUDA
             logger.info("Using device: CUDA")
+            return torch.device("cuda")
         else:
-            device = -1  # CPU
             logger.info("Using device: CPU")
+            return torch.device("cpu")
 
     def detect_sarcasm(self, text: str) -> dict:
         """
@@ -60,18 +63,15 @@ class AdvancedSarcasmDetector:
             predicted_class = int(np.argmax(probs))
             confidence = float(np.max(probs))
 
-            # Our label mapping
             label_map = {0: "Dislike", 1: "Like"}
             predicted_label = label_map[predicted_class]
 
-            # Naive sarcasm heuristic: extremely positive tone, but actual intent seems negative (or vice versa)
-            # NOTE: You can improve this logic based on linguistic cues or metadata
+            # Heuristic sarcasm detector: overly positive words but negative intent
             sarcastic = (
-                "great" in text.lower() or
-                "perfect" in text.lower() or
-                "amazing" in text.lower() or
-                "love" in text.lower()
-            ) and predicted_label == "Dislike" and confidence > 0.85
+                any(phrase in text.lower() for phrase in ["great", "perfect", "amazing", "love"])
+                and predicted_label == "Dislike"
+                and confidence > 0.85
+            )
 
             return {
                 "predicted_label": predicted_label,
