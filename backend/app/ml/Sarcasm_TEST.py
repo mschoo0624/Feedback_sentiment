@@ -48,7 +48,7 @@ test_cases = [
     ("So helpful, they ignored all my questions", "Dislike"),  # sarcastic
 ]
 
-# Run tests
+# Run test cases 
 count = 1
 for text, expected in test_cases:
     inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=128).to(device)

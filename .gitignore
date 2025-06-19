@@ -76,4 +76,4 @@ mlruns/
 
 # Logs and outputs
 *.log
-*.out
+*.outbackend/app/ml/improved_sentiment_model/model.safetensors
