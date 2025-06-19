@@ -4,28 +4,21 @@ import numpy as np
 import logging
 from pathlib import Path
 
-# Set up logging
 logger = logging.getLogger(__name__)
 
-class AdvancedSarcasmDetector:
-    """
-    A sarcasm-aware sentiment classifier using a custom fine-tuned transformer model.
-    """
-
+class AdvancedSentimentClassifier:
     def __init__(self):
         self.device = self._get_device()
-
-        # Resolve path to local model directory
-        model_path = Path(__file__).resolve().parent / "improved_sentiment_model"
+        self.model_path = Path(__file__).resolve().parent / "improved_sentiment_model"
 
         try:
-            logger.info(f"🔄 Loading sarcasm-aware model from {model_path}")
-            self.tokenizer = AutoTokenizer.from_pretrained(str(model_path))
-            self.model = AutoModelForSequenceClassification.from_pretrained(str(model_path)).to(self.device)
+            logger.info(f"🔄 Loading model from {self.model_path}")
+            self.tokenizer = AutoTokenizer.from_pretrained(str(self.model_path))
+            self.model = AutoModelForSequenceClassification.from_pretrained(str(self.model_path)).to(self.device)
             self.model.eval()
-            logger.info("✅ Sarcasm-aware model loaded successfully")
+            logger.info("✅ Sentiment model loaded successfully")
         except Exception as e:
-            logger.error(f"❌ Failed to load sarcasm-aware model: {str(e)}")
+            logger.error(f"❌ Failed to load model: {e}")
             raise
 
     def _get_device(self):
@@ -40,47 +33,29 @@ class AdvancedSarcasmDetector:
             return torch.device("cpu")
 
     def detect_sarcasm(self, text: str) -> dict:
-        """
-        Predict sentiment and determine if sentiment reversal is likely sarcasm.
-        """
         try:
-            # Tokenize input
-            inputs = self.tokenizer(
-                text,
-                return_tensors="pt",
-                truncation=True,
-                max_length=128,
-                padding=True
-            ).to(self.device)
+            inputs = self.tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=128).to(self.device)
 
-            # Forward pass
             with torch.no_grad():
                 outputs = self.model(**inputs)
                 logits = outputs.logits
                 probs = torch.softmax(logits, dim=-1).cpu().numpy()[0]
 
-            # Get prediction
             predicted_class = int(np.argmax(probs))
             confidence = float(np.max(probs))
 
             label_map = {0: "Dislike", 1: "Like"}
             predicted_label = label_map[predicted_class]
-
-            # Heuristic sarcasm detector: overly positive words but negative intent
-            sarcastic = (
-                any(phrase in text.lower() for phrase in ["great", "perfect", "amazing", "love"])
-                and predicted_label == "Dislike"
-                and confidence > 0.85
-            )
-
+            is_sarcastic = predicted_label == "Dislike" and confidence > 0.85
+            
             return {
-                "predicted_label": predicted_label,
-                "confidence": round(confidence, 3),
-                "is_sarcastic": sarcastic
-            }
+            "predicted_label": predicted_label,
+            "confidence": round(confidence, 3),
+            "is_sarcastic": is_sarcastic  # ✅ REQUIRED by sentiment.py
+        }
 
         except Exception as e:
-            logger.error(f"Error in sarcasm detection: {str(e)}")
+            logger.error(f"Error during analysis: {e}")
             return {
                 "predicted_label": "Error",
                 "confidence": 0.0,
