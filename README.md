@@ -32,8 +32,34 @@ Chrome extension and Slackbot for in-the-moment sentiment classification.
 📣 Marketing - Benefit: Amplify positive customer feedback
 
 # ✅ STAGE 1: BACKEND DEVELOPMENT (FastAPI + Transformers)
-## 🛠️ Goal: Build a FastAPI server that exposes a /classify endpoint to accept feedback text and return sentiment.
+## 🛠️ Goal: Build a FastAPI server that exposes a "POST /classify" endpoint to accept feedback text and return sentiment.
 
+- Accept a text input (user feedback),
+- Analyze its sentiment (Like or Dislike),
+- Detect sarcasm (if present),
+- Return a detailed classification response.
+
+### ⚙️ Key Components: 
+- main.py: FastAPI entry point that exposes /classify.
+- schemas.py: Defines request (FeedbackIn) and response (FeedbackOut) data models using Pydantic
+- models.py: SQLAlchemy model for storing feedback into the database
+- crud.py: Handles saving feedback results to the database.
+
+# ✅ STAGE 2: MACHINE LEARNING PIPELINE (Training Custom Sentiment Model)
+## 🧠 Goal: Train a custom sarcasm-aware sentiment classifier using multiple real-world datasets and sarcastic examples to improve performance on ambiguous or sarcastic feedback.
+
+### 📚 Datasets Used: 
+- 🛍️ Amazon Polarity — product reviews (positive/negative)
+- 🎬 IMDB — movie reviews (positive/negative)
+- 💬 SST-2 (Stanford Sentiment Treebank) — short phrases labeled for sentiment
+- 🎭 Custom Sarcastic Examples — handcrafted statements with sarcasm to improve detection
+
+### 📂 Key Files
+sarcasm_sentiment_trainer.py – Training logic (data loading, tokenizer, training loop)
+improved_sentiment_model/ – Saved model weights and tokenizer files
+- Inside the ml/result folder. 
+dataset_analysis.png – Bar plots of label/source distribution
+confusion_matrix.png – Final test evaluation
 
 # 📌 TODO / Future Features
 - Feedback dashboard (with Plotly/Dash)

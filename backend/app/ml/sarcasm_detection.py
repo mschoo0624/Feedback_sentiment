@@ -9,7 +9,9 @@ logger = logging.getLogger(__name__)
 class AdvancedSentimentClassifier:
     def __init__(self):
         self.device = self._get_device()
+        #  impoved Version 1 
         # self.model_path = Path(__file__).resolve().parent / "improved_sentiment_model"
+        
         #  impoved Version 2 
         self.model_path = Path(__file__).resolve().parent / "improved_sentiment_model_V2"
 

@@ -23,7 +23,6 @@ def _get_device():
 
 DEVICE = _get_device()
 
-
 def test_sentiment_model():
     """Test the standalone improved sentiment model (Dislike vs Like)"""
     logger.info("🧪 Testing standalone sentiment model...")
@@ -75,7 +74,9 @@ def test_full_pipeline():
         sys.path.insert(0, str(project_root))
 
         # 🧠 Import the full analyzer
-        from ml.sentiment import analyze_sentiment
+        print("Debugging: Before")
+        from app.ml.sentiment import analyze_sentiment as function
+        print("Debugging: After")
 
         logger.info("🧪 Testing full sarcasm-aware sentiment pipeline...")
 
@@ -94,7 +95,7 @@ def test_full_pipeline():
 
         for text, expected_sentiment, expected_sarcasm in test_cases:
             print("🔍 Processing:", text)
-            result = analyze_sentiment(text)
+            result = function(text)
 
             sentiment_match = result["sentiment"] == expected_sentiment
             sarcasm_match = result["is_sarcastic"] == expected_sarcasm
