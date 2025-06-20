@@ -1,6 +1,6 @@
 # 🔍 FeedbackSentinel Project.
 
-FeedbackSentinel is an AI-powered sentiment analysis tool that classifies customer feedback into "Like" or "Dislike" categories. It uses a fine-tuned language model (like DistilBERT or RoBERTa) for fast, accurate classification and handles sarcasm or ambiguous comments using GPT-4.
+FeedbackSentinel is an AI-powered sentiment analysis tool that classifies customer feedback into "Like" or "Dislike" categories. It leverages a fine-tuned DistilBERT/RoBERTa model for fast, accurate sentiment prediction and incorporates sarcasm detection (trained on custom datasets) to handle ambiguous or ironic comments.
 
 The tool offers a FastAPI backend for processing text and a React dashboard to visualize results in real time. It can also analyze comments from 
 website links and integrate with tools like Slack or a Chrome extension.
