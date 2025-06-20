@@ -61,6 +61,23 @@ improved_sentiment_model/ – Saved model weights and tokenizer files
 dataset_analysis.png – Bar plots of label/source distribution
 confusion_matrix.png – Final test evaluation
 
+# ✅ STAGE 3: Web Scraping + Live Sentiment Analysis Pipeline
+## 🌐 Goal: Allow users to paste any product/review URL and instantly extract public comments, classify them using our sarcasm-aware ML model, and visualize real-time insights in a web dashboard.
+
+### 🚀 Features
+
+- Paste a URL with public comments
+- Automatically scrape and analyze each comment
+- Classify sentiment with sarcasm detection
+- Show top-mentioned word in Dislike comments
+- Display everything on a clean React + Tailwind frontend
+
+### 📍 Example Use Case
+
+A product manager at Samsung pastes a Reddit thread URL about a new tablet and instantly sees that:
+- 28% of users disliked it
+- The word “battery” is the most frequently mentioned problem
+
 # 📌 TODO / Future Features
 - Feedback dashboard (with Plotly/Dash)
 - User auth & history tracking
