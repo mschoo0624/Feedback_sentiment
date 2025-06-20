@@ -42,53 +42,15 @@ else:
     torch_device = torch.device("cpu")
     logger.info("Using device: CPU")
 
-# Visualization config
+# Visualization config for the dataset distributions or confusion matrices.
 sns.set(style="whitegrid", palette="muted")
 plt.rcParams['figure.figsize'] = (12, 8)
 
-# Stage 1: Load and combine diverse labeled datasets
-def create_diverse_dataset(max_samples_per_source=2000):
-    """Load sentiment datasets and add custom sarcastic examples, then balance them"""
-    data = []
+# Label map (Like or Dislike)
+LABEL_MAP = {"Dislike": 0, "Like": 1}
 
-    # Amazon Reviews
-    logger.info("Loading Amazon reviews...")
-    amazon_ds = load_dataset("amazon_polarity")
-    positive_amazon = [ex for ex in amazon_ds["train"] if ex["label"] == 1][:max_samples_per_source]
-    negative_amazon = [ex for ex in amazon_ds["train"] if ex["label"] == 0][:max_samples_per_source]
-
-    # Append Amazon data with labels
-    for example in positive_amazon:
-        data.append({"text": example["content"], "label": "Like", "source": "amazon"})
-    for example in negative_amazon:
-        data.append({"text": example["content"], "label": "Dislike", "source": "amazon"})
-
-    # IMDB Reviews
-    logger.info("Loading IMDB reviews...")
-    imdb_ds = load_dataset("imdb")
-    positive_imdb = [ex for ex in imdb_ds["train"] if ex["label"] == 1][:max_samples_per_source]
-    negative_imdb = [ex for ex in imdb_ds["train"] if ex["label"] == 0][:max_samples_per_source]
-
-    # Truncate long reviews to avoid exceeding max token length
-    for example in positive_imdb:
-        text = example["text"][:500] + "..." if len(example["text"]) > 500 else example["text"]
-        data.append({"text": text, "label": "Like", "source": "imdb"})
-    for example in negative_imdb:
-        text = example["text"][:500] + "..." if len(example["text"]) > 500 else example["text"]
-        data.append({"text": text, "label": "Dislike", "source": "imdb"})
-
-    # Stanford Sentiment Treebank (SST-2)
-    logger.info("Loading Stanford Sentiment...")
-    sst_ds = load_dataset("sst2")
-    sst_samples = sst_ds["train"].shuffle(seed=42).select(range(max_samples_per_source * 2))
-    for example in sst_samples:
-        label = "Like" if example["label"] == 1 else "Dislike"
-        data.append({"text": example["sentence"], "label": label, "source": "sst"})
-
-    # Manually added sarcastic examples
-    logger.info("Adding custom sarcastic examples...")
-    # sarcastic_examples = [ ... ]  # (omitted here for brevity, your list is great)
-    sarcastic_examples = [
+# Custom sarcasm examples (from Reddit/news/tweets, abbreviated)
+custom_sarcasm_examples = [
         ("Oh great, another amazing product!", "Dislike"),
         ("Perfect, just what I didn't need", "Dislike"),
         ("Fantastic service, if you enjoy waiting 3 hours", "Dislike"),
@@ -118,40 +80,77 @@ def create_diverse_dataset(max_samples_per_source=2000):
         ("Customer service was horrible", "Dislike"),
         ("Doesn't work as advertised", "Dislike"),
         ("Cheaply made and overpriced", "Dislike"),
-        ("Save your money, buy something else", "Dislike"),
-    ]
+        ("Save your money, buy something else", "Dislike")
+]
 
-    for text, label in sarcastic_examples:
-        data.append({"text": text, "label": label, "source": "custom"})
+# Tokenize it so, that transformer model can understand it. 
+def tokenize_function(examples, tokenizer, max_length=64):
+    cleaned = [' '.join(t.split()) for t in examples['text']]
+    enc = tokenizer(cleaned, truncation=True, padding=False, max_length=max_length)
+    enc['labels'] = [LABEL_MAP[label] for label in examples['label']]
+    return enc
 
-    # Shuffle and balance dataset to max 5000 per class
-    random.shuffle(data)
-    df = pd.DataFrame(data)
-    max_per_class = min(5000, df['label'].value_counts().min())
-    like_samples = df[df['label'] == 'Like'].sample(n=max_per_class, random_state=42)
-    dislike_samples = df[df['label'] == 'Dislike'].sample(n=max_per_class, random_state=42)
-    balanced_df = pd.concat([like_samples, dislike_samples])
-    balanced_data = balanced_df.to_dict('records')
-    random.shuffle(balanced_data)
+# Evaluation for understanding how well this ML machine sentiment classifier is performing. 
+def compute_metrics(eval_pred):
+    logits, labels = eval_pred
+    preds = np.argmax(logits, axis=-1)
+    return {
+        "accuracy": accuracy_score(labels, preds),
+        "f1_weighted": f1_score(labels, preds, average='weighted'),
+        "f1_macro": f1_score(labels, preds, average='macro')
+    }
 
-    # Log and visualize data distribution
-    logger.info(f"Final dataset: {len(balanced_data)} samples")
-    logger.info("Source distribution:")
-    print(balanced_df['source'].value_counts())
+# Dataset builder
+def create_diverse_dataset(max_per_source=1000):
+    logger.info("📦 Loading datasets...")
+    # Empty data set to store the pre-trained datasets. 
+    ds_list = []
+
+    def wrap(data, label, source):
+        return [{"text": d, "label": label, "source": source} for d in data]
+
+    # Amazon
+    amazon = load_dataset("amazon_polarity", split="train")
+    print("Debugging: Amazon DataSets have loaded!!!")
+    ds_list.extend(wrap([x["content"] for x in amazon if x["label"] == 1][:max_per_source], "Like", "amazon"))
+    ds_list.extend(wrap([x["content"] for x in amazon if x["label"] == 0][:max_per_source], "Dislike", "amazon"))
+
+    # IMDB
+    imdb = load_dataset("imdb", split="train")
+    print("Debugging: IMDB DataSets have loaded!!!")
+    ds_list.extend(wrap([x["text"][:500] for x in imdb if x["label"] == 1][:max_per_source], "Like", "imdb"))
+    ds_list.extend(wrap([x["text"][:500] for x in imdb if x["label"] == 0][:max_per_source], "Dislike", "imdb"))
+
+    # SST-2
+    sst = load_dataset("sst2", split="train")
+    print("Debugging: SST DataSets have loaded!!!")
+    ds_list.extend([{"text": x["sentence"], "label": "Like" if x["label"] else "Dislike", "source": "sst"} for x in sst.select(range(max_per_source * 2))])
+
+    # Adding the customized sarcastic examples. 
+    ds_list.extend([{"text": t, "label": l, "source": "custom"} for t, l in custom_sarcasm_examples])
+
+    # Making sure the "Like" and "Dislike" datasets are balenced out and shuffled it before training. 
+    df = pd.DataFrame(ds_list)
+    min_count = df.label.value_counts().min()
+    df = pd.concat([
+        df[df.label == "Like"].sample(n=min_count, random_state=42),
+        df[df.label == "Dislike"].sample(n=min_count, random_state=42)
+    ])
+    df = df.sample(frac=1).reset_index(drop=True)
 
     # Plot distribution
     plt.figure(figsize=(15, 5))
     plt.subplot(1, 3, 1)
-    sns.countplot(data=balanced_df, x='label')
+    sns.countplot(data=df, x='label')
     plt.title('Label Distribution')
 
     plt.subplot(1, 3, 2)
-    sns.countplot(data=balanced_df, x='source')
+    sns.countplot(data=df, x='source')
     plt.title('Source Distribution')
     plt.xticks(rotation=45)
 
     plt.subplot(1, 3, 3)
-    sns.countplot(data=balanced_df, x='source', hue='label')
+    sns.countplot(data=df, x='source', hue='label')
     plt.title('Source vs Label Distribution')
     plt.xticks(rotation=45)
 
@@ -159,75 +158,33 @@ def create_diverse_dataset(max_samples_per_source=2000):
     plt.savefig("dataset_analysis.png", dpi=300, bbox_inches='tight')
     plt.close()
 
-    return balanced_data
+    return df.to_dict("records")
 
-# Label mapping
-LABEL_MAP = {"Dislike": 0, "Like": 1}
-
-# Tokenization logic with cleaning
-def tokenize_function(examples, tokenizer, max_length=64):
-    """Clean text and tokenize using provided tokenizer"""
-    cleaned_texts = [' '.join(text.split()) for text in examples['text']]
-    encoding = tokenizer(
-        cleaned_texts,
-        truncation=True,
-        padding=False,
-        max_length=max_length,
-        return_attention_mask=True
-    )
-    encoding['labels'] = [LABEL_MAP[label] for label in examples['label']]
-    return encoding
-
-# Evaluation metrics for validation/testing
-def compute_metrics(eval_pred):
-    """Calculate evaluation metrics: accuracy and F1 scores"""
-    logits, labels = eval_pred
-    predictions = np.argmax(logits, axis=-1)
-    return {
-        "accuracy": accuracy_score(labels, predictions),
-        "f1_weighted": f1_score(labels, predictions, average='weighted'),
-        "f1_macro": f1_score(labels, predictions, average='macro')
-    }
-
-# Main training function
-def train_improved_model(model_name="distilbert-base-uncased"):
-    """Train sentiment classifier using diverse data and a transformer model"""
-    
-    logger.info("🔄 Creating diverse dataset...")
-    raw_data = create_diverse_dataset(max_samples_per_source=2000)
-
+# Training logic
+def train_model(model_name="distilbert-base-uncased"):
+    # it will fine-tune a DistilBERT model unless you pass something else
+    logger.info("🔄 Preparing data...")
+    raw = create_diverse_dataset()
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token  # Handle tokenizers missing pad_token
 
-    # Apply tokenization
-    dataset = Dataset.from_list(raw_data)
-    dataset = dataset.map(
-        lambda x: tokenize_function(x, tokenizer, max_length=64),
-        batched=True,
-        remove_columns=['text', 'source', 'label']
-    )
+    data = Dataset.from_list(raw)
+    data = data.map(lambda x: tokenize_function(x, tokenizer), batched=True, remove_columns=["text", "label", "source"])
+    split = data.train_test_split(test_size=0.3, seed=42)
+    val_test = split["test"].train_test_split(test_size=0.5, seed=42)
+    train, val, test = split["train"], val_test["train"], val_test["test"]
 
-    # Train/val/test split (70/15/15)
-    train_test = dataset.train_test_split(test_size=0.3, seed=42)
-    val_test = train_test['test'].train_test_split(test_size=0.5, seed=42)
-    train_dataset = train_test['train']
-    val_dataset = val_test['train']
-    test_dataset = val_test['test']
-
-    logger.info("🤖 Loading pre-trained model...")
+    logger.info("🤖 Loading model...")
     model = AutoModelForSequenceClassification.from_pretrained(
         model_name,
         num_labels=2,
         id2label={0: "Dislike", 1: "Like"},
         label2id={"Dislike": 0, "Like": 1},
-        ignore_mismatched_sizes=True  # Avoid crash if head size doesn't match
-    )
-    model.to(torch_device)
+        ignore_mismatched_sizes=True
+    ).to(torch_device)
 
-    # Training configuration
-    training_args = TrainingArguments(
+    args = TrainingArguments(
         output_dir="./results",
+        do_eval=True,
         eval_strategy="steps",
         eval_steps=200,
         save_strategy="steps",
@@ -235,80 +192,59 @@ def train_improved_model(model_name="distilbert-base-uncased"):
         learning_rate=2e-5,
         per_device_train_batch_size=8,
         per_device_eval_batch_size=8,
-        gradient_accumulation_steps=1,
         num_train_epochs=2,
         weight_decay=0.01,
         logging_dir="./logs",
         logging_steps=50,
-        report_to="none",
         load_best_model_at_end=True,
         metric_for_best_model="f1_weighted",
         greater_is_better=True,
-        # fp16=torch_device.type == "cuda",  # Enable mixed precision only on CUDA
-        # bf16=torch_device.type == "mps",   # Enable bfloat16 only on M1/M2
         save_total_limit=2,
         fp16=torch_device.type == "cuda",
-        bf16=False,  # <- Force disabled
+        bf16=False
     )
 
-    # Trainer initialization
     trainer = Trainer(
         model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=val_dataset,
+        args=args,
+        train_dataset=train,
+        eval_dataset=val,
         tokenizer=tokenizer,
         compute_metrics=compute_metrics,
-        data_collator=DataCollatorWithPadding(tokenizer, padding=True)
+        data_collator=DataCollatorWithPadding(tokenizer)
     )
 
-    # Start training
-    logger.info("🚀 Starting training...")
+    logger.info("🚀 Training...")
     trainer.train()
 
-    # Final evaluation
-    logger.info("📈 Final evaluation on test set...")
-    test_results = trainer.evaluate(test_dataset)
-    logger.info(f"Test Results: {test_results}")
+    logger.info("📊 Evaluating...")
+    preds = trainer.predict(test)
+    y_true = preds.label_ids
+    y_pred = np.argmax(preds.predictions, axis=-1)
 
-    # Generate classification report
-    predictions = trainer.predict(test_dataset)
-    y_true = predictions.label_ids
-    y_pred = np.argmax(predictions.predictions, axis=-1)
-    print("\n📝 Detailed Classification Report:")
+    print("\n📝 Report:")
     print(classification_report(y_true, y_pred, target_names=["Dislike", "Like"]))
 
-    # Confusion matrix visualization
-    plt.figure(figsize=(8, 6))
     cm = confusion_matrix(y_true, y_pred)
     sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=["Dislike", "Like"], yticklabels=["Dislike", "Like"])
-    plt.title("Confusion Matrix - Improved Model")
-    plt.ylabel("True Label")
-    plt.xlabel("Predicted Label")
-    plt.savefig("improved_confusion_matrix.png", dpi=300, bbox_inches='tight')
+    plt.title("Confusion Matrix")
+    plt.savefig("confusion_matrix.png")
     plt.close()
 
-    # Save model locally
-    logger.info("💾 Saving improved model...")
+    logger.info("💾 Saving model...")
     model.save_pretrained("./improved_sentiment_model")
     tokenizer.save_pretrained("./improved_sentiment_model")
 
-    logger.info("✅ Training completed successfully!")
-    logger.info("📁 Model saved to: ./improved_sentiment_model")
-    logger.info("🧪 Use the separate test script to evaluate specific examples")
     return model, tokenizer
 
-# Entry point
 if __name__ == "__main__":
-    # Set seeds for reproducibility
     random.seed(42)
     np.random.seed(42)
     torch.manual_seed(42)
 
     try:
-        # First attempt with distilbert
-        train_improved_model(model_name="distilbert-base-uncased")
+        train_model("distilbert-base-uncased")
     except Exception as e:
-        logger.error(f"Training failed: {e}")
-        logger.info("Trying with an even smaller model...")
-        train_improved_model(model_name="albert-base-v2")
+        logger.error(f"Primary model failed: {e}")
+        logger.info("Fallback: trying ALBERT")
+        train_model("albert-base-v2")

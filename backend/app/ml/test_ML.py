@@ -27,7 +27,9 @@ DEVICE = _get_device()
 def test_sentiment_model():
     """Test the standalone improved sentiment model (Dislike vs Like)"""
     logger.info("🧪 Testing standalone sentiment model...")
-    model_path = Path("./improved_sentiment_model").resolve()
+    # model_path = Path("./improved_sentiment_model").resolve()
+    #  impoved Version 2 
+    model_path = Path("./improved_sentiment_model_V2").resolve()
 
     tokenizer = AutoTokenizer.from_pretrained(str(model_path), local_files_only=True)
     model = AutoModelForSequenceClassification.from_pretrained(str(model_path), local_files_only=True)

@@ -31,7 +31,9 @@ try:
     SARCASM_DETECTOR = CustomSarcasmDetector()
 
     logger.info("🔄 Loading improved sentiment model...")
-    model_path = Path(__file__).resolve().parent / "improved_sentiment_model"
+    # model_path = Path(__file__).resolve().parent / "improved_sentiment_model"
+    # Improved Version 2
+    model_path = Path(__file__).resolve().parent / "improved_sentiment_model_V2"
     assert model_path.exists(), f"Model path not found: {model_path}"
 
     CUSTOM_MODEL_TOKENIZER = AutoTokenizer.from_pretrained(str(model_path), local_files_only=True)

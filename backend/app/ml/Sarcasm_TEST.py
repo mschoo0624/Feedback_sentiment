@@ -26,6 +26,8 @@ device = _get_device()
 
 # Load model
 MODEL_DIR = Path("./improved_sentiment_model").resolve()
+#  impoved Version 2 
+# model_path = Path("./improved_sentiment_model_V2").resolve()
 logger.info(f"Loading model from {MODEL_DIR}")
 tokenizer = AutoTokenizer.from_pretrained(str(MODEL_DIR))
 model = AutoModelForSequenceClassification.from_pretrained(str(MODEL_DIR)).to(device)
