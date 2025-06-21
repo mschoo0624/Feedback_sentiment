@@ -1,36 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# 🧠 FeedbackSentinel
 
-## Getting Started
+> Live Public Comment Analyzer using FastAPI, Transformers, Web Scraping, and Next.js.
 
-First, run the development server:
+---
+
+## 🚀 Overview
+**FeedbackSentinel** is a powerful full-stack application that:
+- Accepts **any URL** with a public comment section (e.g., product pages, blog posts, forums)
+- **Scrapes** visible comments from the page
+- Performs **real-time sentiment analysis** using a fine-tuned Machine Learning model
+- Highlights the **most commonly mentioned word** in negative (Dislike) feedback
+- Displays everything in a beautiful, responsive **dashboard UI** built with **React (Next.js) + Tailwind CSS**
+---
+
+## 🛠️ Project Structure
+### 🧠 Backend: FastAPI + HuggingFace Transformers
+- **ML Model**: Fine-tuned transformer (e.g. DistilBERT) to classify feedback as `Like` or `Dislike`
+- **Endpoints**:
+  - `POST /analyze`: Analyze a single feedback text
+  - `GET /scrape-and-analyze?url=<url>`: Scrape public comments from any URL and analyze all of them
+- **Features**:
+  - Sarcasm detection
+  - Translation support for non-English comments
+  - Most frequent Dislike word insight
+  - Auto-save to MySQL database (SQLAlchemy ORM)
+
+### 🌐 Frontend: React + Tailwind + Next.js
+- Input a **public URL**
+- Display:
+  - Total Likes 👍 and Dislikes 👎
+  - Top keyword in negative comments 🧩
+  - Scrollable list of analyzed comments (with sarcasm + translation flags)
+---
+- Install axios (to send HTTP requests)
+
+## ⚙️ Installation & Setup
+### ✅ Backend Setup (FastAPI)
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+cd backend
+python -m venv venv
+source venv/bin/activate  # or venv\Scripts\activate on Windows
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+pip install -r requirements.txt
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+# Make sure MySQL is running and configured in database.py
+uvicorn app.main:app --reload

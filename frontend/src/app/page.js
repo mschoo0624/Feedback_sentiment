@@ -1,103 +1,130 @@
-import Image from "next/image";
+"use client"; // Should be rendered on the client side. 
 
-export default function Home() {
+import React, { useState } from 'react';
+import axios from 'axios'; // to send HTTP requests. 
+
+export default function Homepage() {
+  // The input field value (the URL pasted by the user).
+  const [url, setUrl] = useState(''); 
+
+  // The result returned from the backend after analysis.
+  const [analysisResult, setAnalysisResult] = useState(null); 
+
+  // Boolean to indicate if a request is in progress 
+  const [loading, setLoading] = useState(false); 
+
+  // Stores any error message that occurs during the request.
+  const [error, setError] = useState(null); 
+
+  const handleAnalyze = async () => {
+    setAnalysisResult(null); 
+    setLoading(true);
+    setError(null);
+
+    try {
+      // sends the "GET" request to the FastAPI backend. and passes the url as a query parameter. 
+      const request = await axios.get(`http://localhost:8000/scrape-and-analyze?url=${encodeURIComponent(url)}`);
+      setAnalysisResult(request.data);
+    } catch (err) {
+      console.error("Error during analysis:", err);
+      if (err.response) {
+        setError(err.response.data.detail || "An error occurred during analysis.");
+      } else {
+        setError("Network error or server is unreachable.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+  
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.js
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+      <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-4xl">
+        {/* Title */}
+        <h1 className="text-3xl font-bold text-center text-gray-800 mb-6">
+          FeedbackSentinel: Live Comment Analysis 🚀
+        </h1>
+        
+        {/* Subheading */}
+        <p className="text-center text-gray-600 mb-8">
+          Paste any link with a comment section and see instant sentiment analysis of public comments using our Machine Learning model.
+        </p>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+        {/* Input + Button */}
+        <div className="flex flex-col md:flex-row gap-4 mb-6">
+          <input
+            type="text"
+            className="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Enter a URL with public comments (e.g., blog post, product review page)"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+          />
+          <button
+            onClick={handleAnalyze}
+            className={`px-6 py-3 rounded-lg text-white font-semibold transition-colors duration-200 ${
+              loading ? 'bg-blue-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
+            }`}
+            disabled={loading}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            {loading ? 'Analyzing...' : 'Analyze Comments'}
+          </button>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+
+        {/* Error Display */}
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+            <strong className="font-bold">Error!</strong>
+            <span className="block sm:inline"> {error}</span>
+          </div>
+        )}
+
+        {/* Display Analysis Results */}
+        {analysisResult && (
+          <div className="mt-8">
+            {/* Summary Stats */}
+            <h2 className="text-2xl font-bold text-gray-700 mb-4">Summary</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="bg-green-50 p-4 rounded-lg shadow">
+                <p className="text-lg font-semibold text-green-700">Likes:</p>
+                <p className="text-3xl font-bold text-green-600">{analysisResult.summary.Like}</p>
+              </div>
+              <div className="bg-red-50 p-4 rounded-lg shadow">
+                <p className="text-lg font-semibold text-red-700">Dislikes:</p>
+                <p className="text-3xl font-bold text-red-600">{analysisResult.summary.Dislike}</p>
+              </div>
+              <div className="bg-yellow-50 p-4 rounded-lg shadow">
+                <p className="text-lg font-semibold text-yellow-700">Most Common Word in Dislikes:</p>
+                <p className="text-xl font-bold text-yellow-600">
+                  {analysisResult.summary.TopDislikeWord || 'N/A'}
+                </p>
+              </div>
+            </div>
+
+            {/* Detailed Comments */}
+            <h2 className="text-2xl font-bold text-gray-700 mb-4">Detailed Comments</h2>
+            <div className="space-y-4 max-h-96 overflow-y-auto pr-2"> {/* Added max-height and overflow for scroll */}
+              {analysisResult.detailed.map((comment, index) => (
+                <div
+                  key={index}
+                  className={`p-4 rounded-lg shadow ${
+                    comment.sentiment === 'Like'
+                      ? 'bg-green-50 border-l-4 border-green-500'
+                      : 'bg-red-50 border-l-4 border-red-500'
+                  }`}
+                >
+                  <p className="font-medium text-gray-800 mb-2">{comment.text}</p>
+                  <p className="text-sm text-gray-600">
+                    Sentiment: <span className={`font-semibold ${comment.sentiment === 'Like' ? 'text-green-600' : 'text-red-600'}`}>{comment.sentiment}</span> |
+                    Confidence: <span className="font-semibold">{comment.confidence}</span> |
+                    Sarcastic: <span className="font-semibold">{comment.is_sarcastic ? 'Yes' : 'No'}</span> |
+                    Translated: <span className="font-semibold">{comment.was_translated ? 'Yes' : 'No'}</span>
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

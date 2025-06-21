@@ -65,7 +65,6 @@ confusion_matrix.png – Final test evaluation
 ## 🌐 Goal: Allow users to paste any product/review URL and instantly extract public comments, classify them using our sarcasm-aware ML model, and visualize real-time insights in a web dashboard.
 
 ### 🚀 Features
-
 - Paste a URL with public comments
 - Automatically scrape and analyze each comment
 - Classify sentiment with sarcasm detection
@@ -73,7 +72,6 @@ confusion_matrix.png – Final test evaluation
 - Display everything on a clean React + Tailwind frontend
 
 ### 📍 Example Use Case
-
 A product manager at Samsung pastes a Reddit thread URL about a new tablet and instantly sees that:
 - 28% of users disliked it
 - The word “battery” is the most frequently mentioned problem
