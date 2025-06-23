@@ -1,0 +1,45 @@
+/* Homepage.css */
+
+/* Smooth scrollbar for detailed comments */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #3b82f6 #d1d5db; /* blue thumb, gray track */
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: #d1d5db; /* gray-300 */
+  border-radius: 9999px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: #3b82f6; /* blue-500 */
+  border-radius: 9999px;
+  border: 2px solid #d1d5db;
+}
+
+/* Button hover animation */
+.btn-animate {
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.btn-animate:hover:not(:disabled) {
+  transform: scale(1.05);
+}
+
+/* Input focus glow */
+.input-focus-glow:focus {
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.6); /* Tailwind blue-500 */
+  outline: none;
+}
+
+/* Responsive tweaks */
+@media (min-width: 768px) {
+  .container {
+    max-width: 900px;
+  }
+}
