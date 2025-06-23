@@ -1,12 +1,14 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from fastapi.middleware.cors import CORSMiddleware
 from bs4 import BeautifulSoup
 import requests
 from collections import Counter
-from typing import List
+from typing import List, Dict, Any # Added Dict, Any for type hints
 import os
+from pathlib import Path # Import Path for robust path handling
+import logging
 
 from app.database import SessionLocal, engine
 from app import models
@@ -46,6 +48,25 @@ def get_db():
     finally:
         db.close()
 
+# --- START OF STOP_WORDS LOADING FROM FILE ---
+STOP_WORDS = set() # Renamed from STOP_WORD to STOP_WORDS for consistency with common naming
+# Construct the path to the Stop_Words.txt file
+stopwords_file_path = Path(__file__).parent / "resources" / "Stop_Words.txt"
+
+try:
+    with open(stopwords_file_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            word = line.strip().lower()
+            if word: # Add word only if not empty
+                STOP_WORDS.add(word)
+    logger.info(f"Loaded {len(STOP_WORDS)} stopwords from {stopwords_file_path}")
+except FileNotFoundError:
+    logger.error(f"Debugging: Stopwords file not found at {stopwords_file_path}.")
+    # For now, it will proceed with an empty set if not found.
+    # In a production app, you might want to raise an exception or use a default list.
+except Exception as e:
+    logger.error(f"Error loading stopwords from {stopwords_file_path}: {e}")
+
 # Root route
 @app.get("/")
 def read_root():
@@ -83,16 +104,17 @@ def analyze_feedback(request: FeedbackIn, db: Session = Depends(get_db)):
         logger.error(f"Analysis failed: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 # Web Scraping + Live Sentiment Analysis Pipeline
 @app.get("/scrape-and-analyze")
-def scrape_and_analyze(url: str):
+async def scrape_and_analyze(url: str = Query(..., description="URL of the page to scrape for comments")): # Added Query for explicit parameter
     """
         Accepts a URL with public comments and returns sentiment analysis + keyword insights.
     """
     try:
         # Fetching the url webpage content. 
         response = requests.get(url, timeout=10)
-        # For the debuigging. 
+        # For debugging. 
         print("DEBUGGING: URL - ", response.content)
         
         # Check if the request was successful
@@ -105,16 +127,15 @@ def scrape_and_analyze(url: str):
         
         # collect comments from <p> tags. 
         # This will need to be refined based on the actual HTML structure of comment sections.
-        comments = [p.text.strip() for p in scrape.find_all("p")  if len(p.text.strip()) >= 20]
+        comments = [p.text.strip() for p in scrape.find_all("p") if len(p.text.strip()) >= 20] # Kept original scraping logic
         
         # If the comments are not found. 
         if not comments:
             raise HTTPException(status_code=404, detail="No comments found on the page. Try a different URL or adjust the scraping logic.")
 
-        results = [] # To store detailed analysis for each comment
-        dislike_words = [] # To collect words from 'Dislike' comments
+        results: List[Dict[str, Any]] = [] # To store detailed analysis for each comment
         
-        # storing the each comments and perfomr the sentiment functions. 
+        # storing the each comments and perform the sentiment functions. 
         for comment in comments:
             res = analyze_sentiment(comment)
             results.append({
@@ -124,12 +145,21 @@ def scrape_and_analyze(url: str):
                 "sentiment": res["sentiment"],
                 "confidence": res["confidence"]
             })
-            # If the sentiment is 'Dislike', add its words to the dislike_words list
-            if res["sentiment"] == "Dislike":
-                dislike_words.extend(comment.lower().split())
+            
+        # Collect words from 'Dislike' comments *after* all sentiments have been determined
+        dislike_comments_text = [d['text'] for d in results if d['sentiment'] == 'Dislike']
+        all_dislike_words = []
+        for comment_text in dislike_comments_text: # Iterate through text of dislike comments
+            # Split words, make lowercase, keep only alphabetic words, filter out short words, and filter stopwords
+            words = [
+                word.lower()
+                for word in comment_text.split()
+                if word.isalpha() and len(word) > 2 and word.lower() not in STOP_WORDS 
+            ]
+            all_dislike_words.extend(words)
             
         # Calculate the most mentioned words in "Dislike"
-        most_mentioned_word = Counter(dislike_words).most_common(1)[0][0] if dislike_words else None
+        most_mentioned_word = Counter(all_dislike_words).most_common(1)[0][0] if all_dislike_words else None
          
         # Count 'Like' and 'Dislike' sentiments
         like_count = sum(1 for r in results if r["sentiment"] == "Like")
@@ -152,4 +182,4 @@ def scrape_and_analyze(url: str):
     except Exception as e:
         # Catch any other unexpected errors
         logger.error(f"Scraping and analysis failed: {e}")
-        raise HTTPException(status_code=500, detail=f"An error occurred during analysis: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"An error occurred during analysis: {str(e)}")
