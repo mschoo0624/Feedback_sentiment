@@ -9,6 +9,9 @@ from typing import List, Dict, Any # Added Dict, Any for type hints
 import os
 from pathlib import Path # Import Path for robust path handling
 import logging
+# Bypass Bot Detection. 
+from playwright.sync_api import sync_playwright
+from pydantic import HttpUrl
 
 from app.database import SessionLocal, engine
 from app import models
@@ -104,30 +107,48 @@ def analyze_feedback(request: FeedbackIn, db: Session = Depends(get_db)):
         logger.error(f"Analysis failed: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# Creating the playwright browser instance. (Bypass the bot detection method here.)
+async def rendered(url: str) -> str:
+    async with sync_playwright() as p:
+        try: 
+            browser = await p.chromium.launch(headless=True) 
+            page = await browser.new_page()
+            await page.goto(url, wait_until="networkidle") 
+            # For sites with very slow loading comments, you might need to wait for a specific selector:
+            html_content = await page.content()
+            return html_content
+        finally: 
+            browser.close()
 
 # Web Scraping + Live Sentiment Analysis Pipeline
 @app.get("/scrape-and-analyze")
-async def scrape_and_analyze(url: str = Query(..., description="URL of the page to scrape for comments")): # Added Query for explicit parameter
+async def scrape_and_analyze(url: HttpUrl = Query(..., description="URL of the page to scrape for comments")): # Added Query for explicit parameter
     """
         Accepts a URL with public comments and returns sentiment analysis + keyword insights.
     """
     try:
-        # Fetching the url webpage content. 
-        response = requests.get(url, timeout=10)
-        # For debugging. 
-        print("DEBUGGING: URL - ", response.content)
+        ################################################
+        # # Fetching the url webpage content. (It sends only the initial HTML content. for server.)
+        # response = requests.get(url, timeout=10)
+        # # For debugging. 
+        # print("DEBUGGING: URL - ", response.content)
         
-        # Check if the request was successful
-        if response.status_code != 200:
-            raise HTTPException(status_code=400, detail=f"Failed to fetch the webpage. Status code: {response.status_code}")
-
+        # # Check if the request was successful
+        # if response.status_code != 200:
+        #     raise HTTPException(status_code=400, detail=f"Failed to fetch the webpage. Status code: {response.status_code}")
+        ##############################################################################
+        
+        # Using the playwright for the bypass the bot deteection on big companies websites. 
+        html_content = await rendered(str(url)) # Calling the function here. 
         # using a BeautifulSoup python library for parsing HTML and XML docs. 
         # HTML parsing libraries like html5lib, lxml, html.parser, etc.
-        scrape = BeautifulSoup(response.text, 'html.parser')
+        scrape = BeautifulSoup(html_content, 'html.parser')
+        logging.info("Debugging: This is the issue.")
         
         # collect comments from <p> tags. 
         # This will need to be refined based on the actual HTML structure of comment sections.
-        comments = [p.text.strip() for p in scrape.find_all("p") if len(p.text.strip()) >= 20] # Kept original scraping logic
+        # comments = [p.text.strip() for p in scrape.find_all("p") if len(p.text.strip()) >= 20] # Kept original scraping logic
+        comments: List[str] = []
         
         # If the comments are not found. 
         if not comments:

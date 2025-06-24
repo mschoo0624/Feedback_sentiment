@@ -19,3 +19,6 @@ tabulate
 matplotlib
 tf-keras
 pathlib
+playwright
+pydantic
+aiohttp
