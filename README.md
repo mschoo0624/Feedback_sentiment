@@ -61,6 +61,24 @@ improved_sentiment_model/ – Saved model weights and tokenizer files
 dataset_analysis.png – Bar plots of label/source distribution
 confusion_matrix.png – Final test evaluation
 
+### 🧱 Problem: Anti-Bot Detection / Blocked Requests
+- Many modern websites (e.g., Amazon, YouTube, Facebook, blog platforms) detect and block:
+These result in:
+Getting blank pages and getting 403 Forbidden / 503 responses. 
+
+### ⚙️ Things To Improve More.
+- Now I am having a challenge becuase direct indicators that websites are blocking your current scraping method. 
+reference - https://playwright.dev/python/docs/api/class-playwright
+1) Bypassing Anti-Bot Measures: Getting access to the page's content. (Adopt a Headless Browser (e.g., Playwright or Selenium))
+ - Modify your scrape-and-analyze endpoint to use Playwright (or Selenium) to navigate to the URL, wait for the page to render, and then extract the page.content() (the fully rendered HTML).
+2) Parsing Varying HTML Structures: Finding the relevant information (like comments) once you have the content. 
+
+#### Advanced Anti-Bot Evasion (If Still Blocked):
+- Proxy Rotation: If your IP keeps getting blocked, even with a headless browser, using a pool of rotating proxy IP addresses can help distribute your requests and avoid IP-based blocks. This is more complex to set up.
+
+- More Realistic Browser Fingerprinting: Beyond basic User-Agent, some sites check for specific browser quirks. Headless browsers are generally good at this, but sometimes advanced configurations are needed.
+
+
 # ✅ STAGE 3: Web Scraping + Live Sentiment Analysis Pipeline
 ## 🌐 Goal: Allow users to paste any product/review URL and instantly extract public comments, classify them using our sarcasm-aware ML model, and visualize real-time insights in a web dashboard.
 

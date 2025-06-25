@@ -10,7 +10,7 @@ import os
 from pathlib import Path # Import Path for robust path handling
 import logging
 # Bypass Bot Detection. 
-from playwright.sync_api import sync_playwright
+from playwright.async_api import async_playwright
 from pydantic import HttpUrl
 
 from app.database import SessionLocal, engine
@@ -108,17 +108,27 @@ def analyze_feedback(request: FeedbackIn, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 # Creating the playwright browser instance. (Bypass the bot detection method here.)
+# async def rendered(url: str) -> str:
+#     async with async_playwright() as p:
+#             browser = await p.chromium.launch(headless=True)
+#             page = await browser.new_page()
+#             await page.goto(url, wait_until="networkidle")  # Wait for network to idle
+#             content = await page.content()
+#             await browser.close()  # Close browser properly
+#             return content
+
 async def rendered(url: str) -> str:
-    async with sync_playwright() as p:
-        try: 
-            browser = await p.chromium.launch(headless=True) 
-            page = await browser.new_page()
-            await page.goto(url, wait_until="networkidle") 
-            # For sites with very slow loading comments, you might need to wait for a specific selector:
-            html_content = await page.content()
-            return html_content
-        finally: 
-            browser.close()
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context()
+        page = await context.new_page()
+        await page.goto(url, wait_until="networkidle")
+        
+        # Wait for at least one review to load (specific to Amazon)
+        await page.wait_for_selector("span[data-hook='review-body']", timeout=10000)
+
+        content = await page.content()
+        await browser.close()
 
 # Web Scraping + Live Sentiment Analysis Pipeline
 @app.get("/scrape-and-analyze")
@@ -148,8 +158,18 @@ async def scrape_and_analyze(url: HttpUrl = Query(..., description="URL of the p
         # collect comments from <p> tags. 
         # This will need to be refined based on the actual HTML structure of comment sections.
         # comments = [p.text.strip() for p in scrape.find_all("p") if len(p.text.strip()) >= 20] # Kept original scraping logic
+        # specific site scraping. 
+        # This is the most important part for detecting comments on ANY website.
         comments: List[str] = []
         
+        # Try to get Amazon reviews if the domain contains 'amazon'
+        if "amazon." in str(url):
+            logger.info("Applying Amazon-specific scraping logic.")
+            review_elements = scrape.find_all("span", {"data-hook": "review-body"})
+            comments = [elem.get_text(strip=True) for elem in review_elements if len(elem.get_text(strip=True)) >= 20]
+        else:
+            # fallback generic scraping
+            comments = [p.text.strip() for p in scrape.find_all("p") if len(p.text.strip()) >= 20]
         # If the comments are not found. 
         if not comments:
             raise HTTPException(status_code=404, detail="No comments found on the page. Try a different URL or adjust the scraping logic.")
