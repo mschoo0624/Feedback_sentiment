@@ -105,113 +105,129 @@ def analyze_feedback(request: FeedbackIn, db: Session = Depends(get_db)):
         logger.error(f"Analysis failed: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# Creating the playwright browser instance. (Bypass the bot detection method here.)
-# async def rendered(url: str) -> str:
-#     async with async_playwright() as p:
-#             browser = await p.chromium.launch(headless=True)
-#             page = await browser.new_page()
-#             await page.goto(url, wait_until="networkidle")  # Wait for network to idle
-#             content = await page.content()
-#             await browser.close()  # Close browser properly
-#             return content
-
+# Playright for Amazon specific website. 
 async def rendered(url: str) -> str:
-    # Launches Playwright using an async context manager.
-    async with async_playwright() as p: # p gives access to browsers like Chromium, Firefox, or WebKit.
+    async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
-        print("DEBUGGING: 1")
-        # Keeps cookies and cache isolated from other sessions.
         context = await browser.new_context()
-        print("DEBUGGING: 2")
-        # From this point, you can interact with the page (navigate, click, type, etc.).
         page = await context.new_page()
-        print("DEBUGGING: 3")
-        # Navigates to the provided url.
-        await page.goto(url, wait_until="networkidle")
-        print("DEBUGGING: 4")
-        # Wait for at least one review to load (specific to Amazon)
-        # await page.wait_for_selector("span[data-hook='review-body']", timeout=10000)
-        # await page.wait_for_selector("p")
-        print("DEBUGGING: 5")
-
-        content = await page.content()
-        print("DEBUGGING: 6")
         
+        await page.goto(url, wait_until="networkidle")
+        
+        # Wait for Amazon reviews to load specifically
+        if "amazon." in url:
+            try:
+                await page.wait_for_selector("span[data-hook='review-body']", timeout=5000)
+            except:
+                logger.warning("Amazon review selector not found, continuing anyway")
+        
+        content = await page.content()
         await browser.close()
-        print("DEBUGGING: browser closed.")
         return content
 
 # Web Scraping + Live Sentiment Analysis Pipeline
 @app.get("/scrape-and-analyze")
-async def scrape_and_analyze(url: HttpUrl = Query(..., description="URL of the page to scrape for comments")): # Added Query for explicit parameter
+async def scrape_and_analyze(url: HttpUrl = Query(..., description="URL of the page to scrape for comments")):
     """
         Accepts a URL with public comments and returns sentiment analysis + keyword insights.
     """
     try:
-        ################################################
-        # # Fetching the url webpage content. (It sends only the initial HTML content. for server.)
+    ##############################################################################################################################
+        # Fetching the url webpage content. (It sends only the initial HTML content. for server.)
         # html_content = requests.get(url, timeout=10)
-        # # For debugging. 
+        # For debugging. 
         # print("DEBUGGING: URL - ", html_content.content)
-        
-        # # Check if the request was successful
+
+        # Check if the request was successful
         # if response.status_code != 200:
         #     raise HTTPException(status_code=400, detail=f"Failed to fetch the webpage. Status code: {response.status_code}")
-        ##############################################################################
+    ##############################################################################################################################
         
-        # Using the playwright for the bypass the bot deteection on big companies websites. 
-        html_content = await rendered(str(url)) # Calling the function here. 
-        print("DEBUGGING: URL - ", html_content.content)
+        # Using Playwright to bypass bot detection
+        html_content = await rendered(str(url))
+        logger.info(f"Successfully fetched content from {url}")
         
-        if html_content.status_code != 200:
-            raise HTTPException(status_code=400, detail=f"Failed to fetch the webpage. Status code: {html_content.status_code}")
-        
-        # using a BeautifulSoup python library for parsing HTML and XML docs. 
-        # HTML parsing libraries like html5lib, lxml, html.parser, etc.
+        # Parse the HTML content with BeautifulSoup
         scrape = BeautifulSoup(html_content, 'html.parser')
-        logging.info("Debugging: This works!!!")
+        logger.info("HTML parsing completed successfully")
         
-        # collect comments from <p> tags. 
-        # comments: List[str] = []
+        # Collect comments from <p> tags and other relevant elements
+        # comments = []
+        comments: List[str] = []
         
-        # specific site scraping. 
-        # This is the most important part for detecting comments on ANY website.
-        # This will need to be refined based on the actual HTML structure of comment sections.
-        # # Try to get Amazon reviews if the domain contains 'amazon'
-        
-        # if "amazon." in str(url):
-        #     logger.info("Applying Amazon-specific scraping logic.")
-        #     review_elements = scrape.find_all("span", {"data-hook": "review-body"})
-        #     comments = [elem.get_text(strip=True) for elem in review_elements if len(elem.get_text(strip=True)) >= 20]
-        # else:
-        #     # fallback generic scraping
-        #     comments = [p.text.strip() for p in scrape.find_all("p") if len(p.text.strip()) >= 20]
+        # Try Amazon-specific selectors first
+        if "amazon." in str(url):
+            logger.info("Applying Amazon-specific scraping logic.")
             
-        comments = [p.text.strip() for p in scrape.find_all("p") if len(p.text.strip()) >= 20]
+            # Try multiple Amazon review selectors
+            review_selectors = [
+                "span[data-hook='review-body']",
+                ".review-text",
+                ".cr-original-review-text",
+                "[data-hook='review-body'] span"
+            ]
+            
+            for selector in review_selectors:
+                review_elements = scrape.select(selector)
+                if review_elements:
+                    comments.extend([elem.get_text(strip=True) for elem in review_elements if len(elem.get_text(strip=True)) >= 20])
+                    logger.info(f"Found {len(review_elements)} reviews using selector: {selector}")
+                    break
         
-        # If the comments are not found. 
+        # If no Amazon-specific comments found, try generic selectors
         if not comments:
-            raise HTTPException(status_code=404, detail="No comments found on the page. Try a different URL or adjust the scraping logic.")
-
-        results: List[Dict[str, Any]] = [] # To store detailed analysis for each comment
-        
-        # storing the each comments and perform the sentiment functions. 
-        for comment in comments:
-            res = analyze_sentiment(comment)
-            results.append({
-                "text": comment,
-                "is_sarcastic": res["is_sarcastic"],
-                "was_translated": res["translated"],
-                "sentiment": res["sentiment"],
-                "confidence": res["confidence"]
-            })
+            logger.info("Trying generic comment selectors")
+            generic_selectors = [
+                "p",
+                ".comment",
+                ".review",
+                "[class*='comment']",
+                "[class*='review']"
+            ]
             
-        # Collect words from 'Dislike' comments *after* all sentiments have been determined
+            for selector in generic_selectors:
+                elements = scrape.select(selector)
+                potential_comments = [elem.get_text(strip=True) for elem in elements if len(elem.get_text(strip=True)) >= 20]
+                if potential_comments:
+                    comments.extend(potential_comments)
+                    logger.info(f"Found {len(potential_comments)} comments using selector: {selector}")
+                    break
+        
+        # Check if we found any comments
+        if not comments:
+            logger.error("No comments found on the page")
+            raise HTTPException(
+                status_code=404, 
+                detail="No comments found on the page. The page might not have reviews/comments, or they might be loaded dynamically."
+            )
+
+        logger.info(f"Found {len(comments)} comments for analysis")
+        results: List[Dict[str, Any]] = []
+        
+        # Analyze sentiment for each comment
+        for i, comment in enumerate(comments):
+            try:
+                res = analyze_sentiment(comment)
+                results.append({
+                    "text": comment,
+                    "is_sarcastic": res["is_sarcastic"],
+                    "was_translated": res["translated"],
+                    "sentiment": res["sentiment"],
+                    "confidence": res["confidence"]
+                })
+                logger.info(f"Analyzed comment {i+1}/{len(comments)}")
+            except Exception as e:
+                logger.error(f"Failed to analyze comment {i+1}: {e}")
+                continue
+        
+        if not results:
+            raise HTTPException(status_code=500, detail="Failed to analyze any comments")
+        
+        # Collect words from 'Dislike' comments
         dislike_comments_text = [d['text'] for d in results if d['sentiment'] == 'Dislike']
         all_dislike_words = []
         
-        for comment_text in dislike_comments_text: # Iterate through text of dislike comments
-            # Split words, make lowercase, keep only alphabetic words, filter out short words, and filter stopwords
+        for comment_text in dislike_comments_text:
             words = [
                 word.lower()
                 for word in comment_text.split()
@@ -226,9 +242,12 @@ async def scrape_and_analyze(url: HttpUrl = Query(..., description="URL of the p
         like_count = sum(1 for r in results if r["sentiment"] == "Like")
         dislike_count = sum(1 for r in results if r["sentiment"] == "Dislike")
 
+        logger.info(f"Analysis complete: {like_count} likes, {dislike_count} dislikes")
+        
         # Return the structured results
         return {
             "summary": {
+                "total_comments": len(results),
                 "Like": like_count,
                 "Dislike": dislike_count,
                 "TopDislikeWord": most_mentioned_word
@@ -236,10 +255,9 @@ async def scrape_and_analyze(url: HttpUrl = Query(..., description="URL of the p
             "detailed": results
         }
 
-    except requests.exceptions.RequestException as req_e:
-        # Handle network-related errors
-        logger.error(f"Network error during scraping: {req_e}")
-        raise HTTPException(status_code=500, detail=f"Could not connect to the URL: {str(req_e)}")
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
     except Exception as e:
         # Catch any other unexpected errors
         logger.error(f"Scraping and analysis failed: {e}")
