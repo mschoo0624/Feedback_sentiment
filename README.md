@@ -94,6 +94,9 @@ A product manager at Samsung pastes a Reddit thread URL about a new tablet and i
 - 28% of users disliked it
 - The word “battery” is the most frequently mentioned problem
 
+### 🖥️ Specific Websites: 
+#### 1: Amazon-Specific Scraping: Optimized selectors for Amazon product review pages
+
 # 📌 TODO / Future Features
 - Feedback dashboard (with Plotly/Dash)
 - User auth & history tracking
