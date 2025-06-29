@@ -78,8 +78,10 @@ def read_root():
 def analyze_feedback(request: FeedbackIn, db: Session = Depends(get_db)):
     try:
         logger.info(f"Analyzing text: {request.text[:50]}...")
+        # Calling the analyze function to begin analysis. 
         result = analyze_sentiment(text=request.text)
         
+        # Saving the text input results into the mySQL db file. 
         feedback_obj = save_feedback(
             db=db,
             data=request,
@@ -107,11 +109,15 @@ def analyze_feedback(request: FeedbackIn, db: Session = Depends(get_db)):
 
 # Playright for Amazon specific website. 
 async def rendered(url: str) -> str:
-    async with async_playwright() as p:
+    #  Playwright context setup and "p" gives access to Playwright's browsers. 
+    async with async_playwright() as p: 
+        # Choosing the Chrome as a broweser. 
         browser = await p.chromium.launch(headless=True)
+        # Create instane of context and think it as a fresh incognito window for isolating cookies, cache, local storage.
         context = await browser.new_context()
         page = await context.new_page()
         
+        # Navigates to the URL link and wait until network has no requests for at least 500ms "networkidle". 
         await page.goto(url, wait_until="networkidle")
         
         # Wait for Amazon reviews to load specifically
@@ -121,6 +127,7 @@ async def rendered(url: str) -> str:
             except:
                 logger.warning("Amazon review selector not found, continuing anyway")
         
+        # Extracts the full HTML source of the page at this point
         content = await page.content()
         await browser.close()
         return content
@@ -167,16 +174,19 @@ async def scrape_and_analyze(url: HttpUrl = Query(..., description="URL of the p
                 "[data-hook='review-body'] span"
             ]
             
+            # Loop through each selector and use BeautifulSoup’s select() to find matching elements in the parsed HTML.
             for selector in review_selectors:
                 review_elements = scrape.select(selector)
+                # If any elements are found, then strip extra whitespace, keep comments 20+ characters and add them to comments lists. 
                 if review_elements:
                     comments.extend([elem.get_text(strip=True) for elem in review_elements if len(elem.get_text(strip=True)) >= 20])
                     logger.info(f"Found {len(review_elements)} reviews using selector: {selector}")
                     break
         
         # If no Amazon-specific comments found, try generic selectors
-        if not comments:
+        if not comments: # Fallback. 
             logger.info("Trying generic comment selectors")
+            # Trying different Amazon review selectors
             generic_selectors = [
                 "p",
                 ".comment",
@@ -184,7 +194,7 @@ async def scrape_and_analyze(url: HttpUrl = Query(..., description="URL of the p
                 "[class*='comment']",
                 "[class*='review']"
             ]
-            
+            # Same loop iteration process again. 
             for selector in generic_selectors:
                 elements = scrape.select(selector)
                 potential_comments = [elem.get_text(strip=True) for elem in elements if len(elem.get_text(strip=True)) >= 20]
@@ -207,7 +217,9 @@ async def scrape_and_analyze(url: HttpUrl = Query(..., description="URL of the p
         # Analyze sentiment for each comment
         for i, comment in enumerate(comments):
             try:
+                # Analyzing the comments with the ML machine logics. 
                 res = analyze_sentiment(comment)
+                # Format of appending to the result lists. 
                 results.append({
                     "text": comment,
                     "is_sarcastic": res["is_sarcastic"],
@@ -215,6 +227,7 @@ async def scrape_and_analyze(url: HttpUrl = Query(..., description="URL of the p
                     "sentiment": res["sentiment"],
                     "confidence": res["confidence"]
                 })
+                # Showing the analyzed comments. 
                 logger.info(f"Analyzed comment {i+1}/{len(comments)}")
             except Exception as e:
                 logger.error(f"Failed to analyze comment {i+1}: {e}")
@@ -225,6 +238,7 @@ async def scrape_and_analyze(url: HttpUrl = Query(..., description="URL of the p
         
         # Collect words from 'Dislike' comments
         dislike_comments_text = [d['text'] for d in results if d['sentiment'] == 'Dislike']
+        # Empty list to stroe the disliked words. 
         all_dislike_words = []
         
         for comment_text in dislike_comments_text:
