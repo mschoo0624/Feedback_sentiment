@@ -1,3 +1,13 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.btn-animate {
+  transition: all 0.3s ease;
+}
+.input-focus-glow:focus {
+  box-shadow: 0 0 5px #3b82f6;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  width: 4px;
+}

@@ -1,45 +1,207 @@
-/* Homepage.css */
-
-/* Smooth scrollbar for detailed comments */
-.scrollbar-thin {
-  scrollbar-width: thin;
-  scrollbar-color: #3b82f6 #d1d5db; /* blue thumb, gray track */
+/* Base background */
+.homepage-wrapper {
+  min-height: 100vh;
+  background: linear-gradient(to right, #f8fafc, #e0f2fe);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-.scrollbar-thin::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+/* Main container */
+.content-box {
+  background: white;
+  padding: 2.5rem 3rem;
+  border-radius: 1.25rem;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+  max-width: 960px;
+  width: 100%;
+  transition: transform 0.3s ease;
 }
 
-.scrollbar-thin::-webkit-scrollbar-track {
-  background: #d1d5db; /* gray-300 */
-  border-radius: 9999px;
+.content-box:hover {
+  transform: scale(1.01);
 }
 
-.scrollbar-thin::-webkit-scrollbar-thumb {
-  background-color: #3b82f6; /* blue-500 */
-  border-radius: 9999px;
-  border: 2px solid #d1d5db;
+/* Titles */
+.title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  text-align: center;
+  color: #0f172a;
+  margin-bottom: 1rem;
 }
 
-/* Button hover animation */
-.btn-animate {
-  transition: background-color 0.3s ease, transform 0.2s ease;
+.subtitle {
+  text-align: center;
+  color: #64748b;
+  font-size: 1.125rem;
+  margin-bottom: 2rem;
 }
 
-.btn-animate:hover:not(:disabled) {
-  transform: scale(1.05);
+/* Input and button section */
+.input-button-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
 }
 
-/* Input focus glow */
-.input-focus-glow:focus {
-  box-shadow: 0 0 8px rgba(59, 130, 246, 0.6); /* Tailwind blue-500 */
+.input-field {
+  padding: 1rem;
+  border: 2px solid #cbd5e1;
+  border-radius: 0.75rem;
+  font-size: 1rem;
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.input-field:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
   outline: none;
 }
 
-/* Responsive tweaks */
-@media (min-width: 768px) {
-  .container {
-    max-width: 900px;
-  }
+/* Button */
+.analyze-btn {
+  padding: 0.85rem;
+  background-color: #3b82f6;
+  color: white;
+  font-weight: 600;
+  border: none;
+  border-radius: 0.75rem;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.analyze-btn:hover:not(:disabled) {
+  background-color: #2563eb;
+  transform: translateY(-2px);
+}
+
+.analyze-btn:disabled {
+  background-color: #a5b4fc;
+  cursor: not-allowed;
+}
+
+/* Error */
+.error-box {
+  background-color: #fee2e2;
+  border: 1px solid #f87171;
+  color: #991b1b;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  margin-bottom: 1rem;
+  font-weight: 500;
+}
+
+/* Summary Section */
+.results h2 {
+  font-size: 1.75rem;
+  color: #1e293b;
+  margin-bottom: 1rem;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 0.5rem;
+}
+
+.summary-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.summary-box {
+  flex: 1;
+  min-width: 200px;
+  padding: 1.25rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  text-align: center;
+}
+
+.like-box {
+  background-color: #ecfdf5;
+  border-left: 4px solid #10b981;
+}
+
+.dislike-box {
+  background-color: #fef2f2;
+  border-left: 4px solid #ef4444;
+}
+
+.word-box {
+  background-color: #fefce8;
+  border-left: 4px solid #facc15;
+}
+
+.summary-count {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #1e293b;
+  margin-top: 0.25rem;
+}
+
+.summary-word {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #92400e;
+  margin-top: 0.25rem;
+}
+
+/* Comments Section */
+.comments-list {
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+  scrollbar-width: thin;
+  scrollbar-color: #3b82f6 #e2e8f0;
+}
+
+.comments-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.comments-list::-webkit-scrollbar-track {
+  background: #e2e8f0;
+  border-radius: 9999px;
+}
+
+.comments-list::-webkit-scrollbar-thumb {
+  background-color: #3b82f6;
+  border-radius: 9999px;
+  border: 2px solid #e2e8f0;
+}
+
+/* Individual comment */
+.comment-card {
+  padding: 1rem;
+  border-radius: 0.75rem;
+  margin-bottom: 1rem;
+  border-left: 5px solid;
+  transition: background-color 0.3s ease;
+}
+
+.comment-card.like {
+  background: #f0fdf4;
+  border-color: #22c55e;
+}
+
+.comment-card.dislike {
+  background: #fef2f2;
+  border-color: #ef4444;
+}
+
+.comment-text {
+  font-size: 1rem;
+  font-weight: 500;
+  color: #1f2937;
+  margin-bottom: 0.5rem;
+}
+
+.comment-meta {
+  font-size: 0.875rem;
+  color: #4b5563;
+  line-height: 1.4;
 }

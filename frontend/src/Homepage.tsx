@@ -60,32 +60,35 @@ export default function Homepage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-      <div className="bg-white p-8 rounded-lg shadow-xl w-full max-w-4xl container">
+    <div className="homepage-wrapper">
+      <div className="content-box">
         {/* Title */}
-        <h1 className="text-3xl font-bold text-center text-gray-800 mb-6">
+        <h1 className="title">
           FeedbackSentinel: Live Comment Analysis 🚀
         </h1>
 
         {/* Subheading */}
-        <p className="text-center text-gray-600 mb-8">
+        <p className="subtitle">
           Paste any link with a comment section and see instant sentiment analysis of public comments using our Machine Learning model.
         </p>
 
         {/* Input + Button */}
-        <div className="flex flex-col md:flex-row gap-4 mb-6">
+        <div className="input-button-group">
           <input
             type="text"
-            className="flex-grow p-3 border border-gray-300 rounded-lg input-focus-glow focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="input-field"
             placeholder="Enter a URL with public comments (e.g., blog post, product review page)"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => { // for enter key to work. 
+              if (e.key === 'Enter') {
+                handleAnalyze();
+              }
+            }}
           />
           <button
             onClick={handleAnalyze}
-            className={`px-6 py-3 rounded-lg text-white font-semibold btn-animate transition-colors duration-200 ${
-              loading ? 'bg-blue-300 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
-            }`}
+            className="analyze-btn"
             disabled={loading}
           >
             {loading ? 'Analyzing...' : 'Analyze Comments'}
@@ -94,55 +97,44 @@ export default function Homepage() {
 
         {/* Error Display */}
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
-            <strong className="font-bold">Error!</strong>
-            <span className="block sm:inline"> {error}</span>
+          <div className="error-box" role="alert">
+            <strong>Error!</strong> {error}
           </div>
         )}
 
         {/* Display Analysis Results */}
         {analysisResult && (
-          <div className="mt-8">
+          <div className="results">
             {/* Summary Stats */}
-            <h2 className="text-2xl font-bold text-gray-700 mb-4">Summary</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <div className="bg-green-50 p-4 rounded-lg shadow-lg">
-                <p className="text-lg font-semibold text-green-700">Likes:</p>
-                <p className="text-3xl font-bold text-green-600">{analysisResult.summary.Like}</p>
+            <h2>Summary</h2>
+            <div className="summary-grid">
+              <div className="summary-box like-box">
+                <p>Likes:</p>
+                <p className="summary-count">{analysisResult.summary.Like}</p>
               </div>
-              <div className="bg-red-50 p-4 rounded-lg shadow-lg">
-                <p className="text-lg font-semibold text-red-700">Dislikes:</p>
-                <p className="text-3xl font-bold text-red-600">{analysisResult.summary.Dislike}</p>
+              <div className="summary-box dislike-box">
+                <p>Dislikes:</p>
+                <p className="summary-count">{analysisResult.summary.Dislike}</p>
               </div>
-              <div className="bg-yellow-50 p-4 rounded-lg shadow-lg">
-                <p className="text-lg font-semibold text-yellow-700">Most Common Word in Dislikes:</p>
-                <p className="text-xl font-bold text-yellow-600">
-                  {analysisResult.summary.TopDislikeWord || 'N/A'}
-                </p>
+              <div className="summary-box word-box">
+                <p>Most Common Word in Dislikes:</p>
+                <p className="summary-word">{analysisResult.summary.TopDislikeWord || 'N/A'}</p>
               </div>
             </div>
 
             {/* Detailed Comments */}
-            <h2 className="text-2xl font-bold text-gray-700 mb-4">Detailed Comments</h2>
-            <div className="space-y-4 max-h-96 overflow-y-auto pr-2 scrollbar-thin">
+            <h2>Detailed Comments</h2>
+            <div className="comments-list">
               {analysisResult.detailed.map((comment, index) => (
                 <div
                   key={index}
-                  className={`p-4 rounded-lg shadow ${
-                    comment.sentiment === 'Like'
-                      ? 'bg-green-50 border-l-4 border-green-500'
-                      : 'bg-red-50 border-l-4 border-red-500'
-                  }`}
+                  className={`comment-card ${comment.sentiment === 'Like' ? 'like' : 'dislike'}`}
                 >
-                  <p className="font-medium text-gray-800 mb-2">{comment.text}</p>
-                  <p className="text-sm text-gray-600">
-                    Sentiment:{' '}
-                    <span className={`font-semibold ${comment.sentiment === 'Like' ? 'text-green-600' : 'text-red-600'}`}>
-                      {comment.sentiment}
-                    </span>{' '}
-                    | Confidence: <span className="font-semibold">{comment.confidence}</span> | Sarcastic:{' '}
-                    <span className="font-semibold">{comment.is_sarcastic ? 'Yes' : 'No'}</span> | Translated:{' '}
-                    <span className="font-semibold">{comment.was_translated ? 'Yes' : 'No'}</span>
+                  <p className="comment-text">{comment.text}</p>
+                  <p className="comment-meta">
+                    Sentiment: <strong>{comment.sentiment}</strong> | Confidence: <strong>{comment.confidence}</strong> | 
+                    Sarcastic: <strong>{comment.is_sarcastic ? 'Yes' : 'No'}</strong> | 
+                    Translated: <strong>{comment.was_translated ? 'Yes' : 'No'}</strong>
                   </p>
                 </div>
               ))}
